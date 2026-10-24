@@ -106,14 +106,15 @@ static void test_rootof_domain_and_resource_errors(
                  parametric.error().code == LMCAS::CasErrc::Inconclusive))
         << "parametric RootOf construction is explicitly inconclusive";
 
-    auto approximate_poly = SymbolicExpr::add(
+    auto decimal_poly = SymbolicExpr::add(
         SymbolicExpr::power(x, num(2)), SymbolicExpr::number(-4.0));
-    LMCAS::ComputationContext approximate_context;
+    LMCAS::ComputationContext decimal_context;
     auto approximate = LMCAS::make_rootof_checked(
-        approximate_poly, "x", 0, approximate_context);
-    EXPECT_TRUE((!approximate &&
-                 approximate.error().code == LMCAS::CasErrc::Inconclusive))
-        << "ApproxReal coefficients are not silently exactified";
+        decimal_poly, "x", 0, decimal_context);
+    ASSERT_TRUE(approximate) << approximate.error().message;
+    auto value = LMCAS::rootof_evaluate_checked(approximate.value());
+    ASSERT_TRUE(value);
+    EXPECT_NEAR(value.value(), -2.0, 1e-10);
 
     LMCAS::CancellationToken cancellation;
     cancellation.cancel();

@@ -79,7 +79,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::matrix_product_element
         normalization_append(rewrite_budget(), nodes, terms,
                              make_normalized_multiply_node({first, second}, rewrite_budget()));
     }
-    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
     normalization_check_arithmetic<AddNode>(rewrite_budget(), terms, nodes);
     detail::make_node<AddNode>(terms)->accept(visitor);
     return visitor.get_result();

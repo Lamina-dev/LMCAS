@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "symbolic_ode.hpp"
 #include "internal/ode_characteristic_roots.hpp"
 #include "internal/expression_analysis.hpp"
@@ -6,6 +7,7 @@
 #include "internal/symbolic_ast.hpp"
 #include "symbolic.hpp"
 #include "assumption_context.hpp"
+#include "integrator.hpp"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include <cmath>
@@ -47,13 +49,15 @@ std::shared_ptr<const SymbolicNode> reciprocal_on_regular_region(
 }
 
 /// Check if the dependent variable is known Positive in the given context.
-static bool dep_var_is_positive(const std::string& y, const AssumptionContext* ctx) {
+static Result<bool> dep_var_is_positive(
+    const std::string& y, const AssumptionContext* ctx, ComputationContext& context) {
     if (!ctx) {
         return false;
     }
     auto y_expr = SymbolicExpr::variable(y);
-    auto positive = ctx->is_positive(*y_expr);
-    return positive && positive.value() == Tribool::True;
+    auto positive = ctx->is_positive_checked(*y_expr, context);
+    if (!positive) { return Result<bool>::failure(positive.error()); }
+    return positive.value() == Tribool::True;
 }
 
 /// Wrap an expression in abs() to signal positive-branch preference.
@@ -66,12 +70,11 @@ static std::shared_ptr<SymbolicExpr> make_abs(std::shared_ptr<SymbolicExpr> expr
 
 // solve_separable_ode
 
-std::shared_ptr<SymbolicExpr> solve_separable_ode(
-    std::shared_ptr<SymbolicExpr> rhs,
-    const std::string& x,
-    const std::string& y,
-    const AssumptionContext* ctx
-) {
+ExprPtr solve_separable_ode(ExprPtr rhs, const std::string& x,
+                           const std::string& y, const AssumptionContext* ctx) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (!is_separable(rhs, x, y)) {
         return nullptr;
@@ -99,47 +102,60 @@ std::shared_ptr<SymbolicExpr> solve_separable_ode(
         g = detail::make_expression_ptr(detail::make_node<MultiplyNode>(std::move(y_factors)));
     }
 
-    auto inv_y = detail::make_expression_ptr(reciprocal_on_regular_region(detail::node(g)))->simplify();
-    auto int_y = inv_y->integrate(y);
-    auto int_x = f->simplify()->integrate(x);
-    auto result = SymbolicExpr::add(
-        int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x))->simplify();
+    auto inv_y = detail::make_expression_ptr(detail::normalize_node(reciprocal_on_regular_region(detail::node(g)), transform_budget));
+    Integrator integrator;
+    auto integrated_y = integrator.integrate_checked(*inv_y, y, context);
+    if (!integrated_y) { throw integrated_y.error(); }
+    auto int_y = std::make_shared<SymbolicExpr>(std::move(integrated_y.value()));
+    auto normalized_f = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(f), transform_budget));
+    auto integrated_x = integrator.integrate_checked(*normalized_f, x, context);
+    if (!integrated_x) { throw integrated_x.error(); }
+    auto int_x = std::make_shared<SymbolicExpr>(std::move(integrated_x.value()));
+    auto result = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
+        int_y, SymbolicExpr::multiply(SymbolicExpr::number(-1), int_x))), transform_budget));
 
     // Preserve the existing positive-context branch marker.
-    if (dep_var_is_positive(y, ctx)) {
+    auto positive = dep_var_is_positive(y, ctx, context);
+    if (!positive) { throw positive.error(); }
+    if (positive.value()) {
         result = make_abs(result);
     }
 
     return result;
 }
 
+
 // solve_linear1_ode
 
-std::shared_ptr<SymbolicExpr> solve_linear1_ode(
-    std::shared_ptr<SymbolicExpr> Px,
-    std::shared_ptr<SymbolicExpr> Qx,
-    const std::string& x,
-    const std::string& y,
-    const AssumptionContext* ctx
-) {
-
-    auto intP = Px->integrate(x);
+ExprPtr solve_linear1_ode(ExprPtr Px, ExprPtr Qx, const std::string& x,
+                         const std::string& y, const AssumptionContext* ctx) {
+    ComputationContext context;
+    Integrator integrator;
+    auto integrated_p = integrator.integrate_checked(*Px, x, context);
+    if (!integrated_p) { throw integrated_p.error(); }
+    auto intP = std::make_shared<SymbolicExpr>(std::move(integrated_p.value()));
     auto mu = SymbolicExpr::exp(intP);
 
     auto Qmu = SymbolicExpr::multiply(Qx, mu);
-    auto intQmu = Qmu->integrate(x);
+    auto integrated_q = integrator.integrate_checked(*Qmu, x, context);
+    if (!integrated_q) { throw integrated_q.error(); }
+    auto intQmu = std::make_shared<SymbolicExpr>(std::move(integrated_q.value()));
 
     auto C = SymbolicExpr::variable("C");
     auto num = SymbolicExpr::add(intQmu, C);
     auto result = SymbolicExpr::divide(num, mu);
 
     // When the dependent variable is known Positive, prefer positive branch.
-    if (dep_var_is_positive(y, ctx)) {
+    auto positive = dep_var_is_positive(y, ctx, context);
+    if (!positive) { throw positive.error(); }
+    if (positive.value()) {
         result = make_abs(result);
     }
 
     return result;
 }
+
 
 // solve_linear2_ode
 
@@ -196,14 +212,18 @@ solve_linear2_homogeneous(
     double a, double b, double c,
     const std::string& x,
     const std::string& y,
-    const AssumptionContext* ctx)
-{
+    const AssumptionContext* ctx, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c)) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(
             CasErrc::InvalidArgument,
             "solve_linear2_ode: coefficients must be finite",
             kSolveLinear2OdeOperation);
     }
+    ExprPtr solution;
     if (a == 0.0) {
         if (b == 0.0) {
             return Result<std::shared_ptr<SymbolicExpr>>::failure(
@@ -218,26 +238,34 @@ solve_linear2_homogeneous(
                 "solve_linear2_ode: degenerate coefficient normalization is non-finite",
                 kSolveLinear2OdeOperation);
         }
-        auto solution = solve_linear1_ode(
-            SymbolicExpr::number(normalized_c),
-            SymbolicExpr::number(0), x, y, ctx);
-        return Result<std::shared_ptr<SymbolicExpr>>::success(
-            std::move(solution));
+        // 常系数退化方程以特征根 -c/b 构造指数基，沿用数值系数的求解语义。
+        solution = SymbolicExpr::multiply(SymbolicExpr::variable("C"),
+            SymbolicExpr::exp(SymbolicExpr::multiply(
+                SymbolicExpr::number(-normalized_c), SymbolicExpr::variable(x))));
+    } else {
+        auto roots = ode_root_detail::find_characteristic_roots(
+            {a, b, c}, kSolveLinear2OdeOperation);
+        if (!roots) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(roots.error());
+        }
+        solution = linear2_root_basis(roots.value(), x);
     }
-
-    auto roots = ode_root_detail::find_characteristic_roots(
-        {a, b, c}, kSolveLinear2OdeOperation);
-    if (!roots) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(roots.error());
-    }
-
-    auto solution = linear2_root_basis(roots.value(), x);
-    solution = solution->simplify();
-    if (dep_var_is_positive(y, ctx)) {
+    solution = detail::make_expression_ptr(detail::normalize_node(detail::node(solution), transform_budget));
+    auto positive = dep_var_is_positive(y, ctx, context);
+    if (!positive) { return ExpressionResult::failure(positive.error()); }
+    if (positive.value()) {
         solution = make_abs(solution);
     }
     return Result<std::shared_ptr<SymbolicExpr>>::success(
         std::move(solution));
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "solve_linear2_homogeneous");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "solve_linear2_homogeneous");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "solve_linear2_homogeneous");
 }
 
 std::shared_ptr<SymbolicExpr> solve_linear2_ode(
@@ -247,6 +275,7 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
     const std::string& y,
     const AssumptionContext* ctx
 ) {
+    ComputationContext context;
     if (!fx || !LMCAS::detail::node(fx)) {
         throw std::invalid_argument(
             "solve_linear2_ode: forcing expression must not be null");
@@ -255,7 +284,7 @@ std::shared_ptr<SymbolicExpr> solve_linear2_ode(
         throw std::logic_error(
             "solve_linear2_ode: non-homogeneous case is outside the current support domain");
     }
-    auto solution = solve_linear2_homogeneous(a, b, c, x, y, ctx);
+    auto solution = solve_linear2_homogeneous(a, b, c, x, y, ctx, context);
     if (!solution) {
         if (solution.error().code == CasErrc::InvalidArgument) {
             throw std::invalid_argument(solution.error().message);
@@ -302,7 +331,7 @@ Result<std::shared_ptr<SymbolicExpr>> solve_linear2_ode_checked(
                 kSolveLinear2OdeOperation);
         }
 
-        return solve_linear2_homogeneous(a, b, c, x, y, ctx);
+        return solve_linear2_homogeneous(a, b, c, x, y, ctx, context);
     } catch (const std::invalid_argument& ex) {
         return Result<std::shared_ptr<SymbolicExpr>>::failure(
             CasErrc::InvalidArgument, ex.what(), kSolveLinear2OdeOperation);

@@ -5,7 +5,7 @@
 #include <string>
 #include <iomanip>
 
-#include "symbolic.hpp"
+#include "expr.hpp"
 #include "symbolic_matrix.hpp"
 
 using namespace LMCAS;
@@ -40,7 +40,9 @@ void bench_polynomial_expand() {
 
     auto expr = SymbolicExpr::power(base, SymbolicExpr::number(8));
 
-    auto expanded = expr->expand();
+    ComputationContext context;
+    auto expanded = LMCAS::expand(expr, context);
+    if (!expanded) { t.skip_with_error(expanded.error().message); }
 
 }
 
@@ -63,7 +65,11 @@ bool bench_matrix_determinant(int n, ComputationContext& context) {
         return false;
     }
 
-    auto expanded = det.value()->expand();
+    auto expanded = LMCAS::expand(det.value(), context);
+    if (!expanded) {
+        t.skip_with_error(expanded.error().message);
+        return false;
+    }
     return true;
 }
 
@@ -106,7 +112,9 @@ void bench_symbolic_diff() {
 
     auto f = SymbolicExpr::power(inner, SymbolicExpr::number(5));
 
-    auto d = f->differentiate("x")->simplify();
+    ComputationContext context;
+    auto derivative = LMCAS::differentiate(f, "x", context);
+    if (!derivative) { t.skip_with_error(derivative.error().message); }
 }
 
 void bench_linear_system() {

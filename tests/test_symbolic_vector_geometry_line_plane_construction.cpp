@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_vector_geometry.hpp"
 #include <cfloat>
@@ -9,9 +10,9 @@ TEST(SymbolicVectorGeometryLinePlaneConstruction, LineFromPointsDirection) {
     std::vector<std::shared_ptr<SymbolicExpr>> p1 = {SymbolicExpr::number(0), SymbolicExpr::number(0), SymbolicExpr::number(0)};
     std::vector<std::shared_ptr<SymbolicExpr>> p2 = {SymbolicExpr::number(1), SymbolicExpr::number(2), SymbolicExpr::number(3)};
     auto line = LMCAS::line_from_two_points_checked(p1, p2).value();
-    EXPECT_TRUE(test_expression_text((line.direction[0]->simplify()), ("1"))) << "dir.x = 1";
-    EXPECT_TRUE(test_expression_text((line.direction[1]->simplify()), ("2"))) << "dir.y = 2";
-    EXPECT_TRUE(test_expression_text((line.direction[2]->simplify()), ("3"))) << "dir.z = 3";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(line.direction[0]).value()), ("1"))) << "dir.x = 1";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(line.direction[1]).value()), ("2"))) << "dir.y = 2";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(line.direction[2]).value()), ("3"))) << "dir.z = 3";
 }
 
 TEST(SymbolicVectorGeometryLinePlaneConstruction, PlaneFromPointsNormal) {
@@ -19,9 +20,9 @@ TEST(SymbolicVectorGeometryLinePlaneConstruction, PlaneFromPointsNormal) {
     std::vector<std::shared_ptr<SymbolicExpr>> p2 = {SymbolicExpr::number(1), SymbolicExpr::number(0), SymbolicExpr::number(0)};
     std::vector<std::shared_ptr<SymbolicExpr>> p3 = {SymbolicExpr::number(0), SymbolicExpr::number(1), SymbolicExpr::number(0)};
     auto plane = LMCAS::plane_from_three_points_checked(p1, p2, p3).value();
-    EXPECT_TRUE(test_expression_text((plane.normal[0]->simplify()), ("0"))) << "n.x = 0";
-    EXPECT_TRUE(test_expression_text((plane.normal[1]->simplify()), ("0"))) << "n.y = 0";
-    EXPECT_TRUE(test_expression_text((plane.normal[2]->simplify()), ("1"))) << "n.z = 1";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(plane.normal[0]).value()), ("0"))) << "n.x = 0";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(plane.normal[1]).value()), ("0"))) << "n.y = 0";
+    EXPECT_TRUE(test_expression_text((LMCAS::simplify(plane.normal[2]).value()), ("1"))) << "n.z = 1";
 }
 
 TEST(SymbolicVectorGeometryLinePlaneConstruction, LineConstructionCheckedValue) {
@@ -34,7 +35,7 @@ TEST(SymbolicVectorGeometryLinePlaneConstruction, LineConstructionCheckedValue) 
         {zero, zero, zero}, {one, two, three});
     ASSERT_TRUE((constructed_line.has_value())) << "checked line_from_two_points succeeds";
     if (constructed_line) {
-        EXPECT_TRUE(test_expression_text((constructed_line.value().direction[2]->simplify()), ("3"))) << "checked constructed line z direction = 3";
+        EXPECT_TRUE(test_expression_text((LMCAS::simplify(constructed_line.value().direction[2]).value()), ("3"))) << "checked constructed line z direction = 3";
     }
 }
 
@@ -61,7 +62,7 @@ TEST(SymbolicVectorGeometryLinePlaneConstruction, PlaneConstructionCheckedValue)
         {zero, zero, zero}, {one, zero, zero}, {zero, one, zero});
     ASSERT_TRUE((checked_plane.has_value())) << "checked plane_from_three_points succeeds";
     if (checked_plane) {
-        EXPECT_TRUE(test_expression_text((checked_plane.value().normal[2]->simplify()), ("1"))) << "checked plane normal z = 1";
+        EXPECT_TRUE(test_expression_text((LMCAS::simplify(checked_plane.value().normal[2]).value()), ("1"))) << "checked plane normal z = 1";
     }
 }
 

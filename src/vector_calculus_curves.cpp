@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/vector_calculus_support.hpp"
 #include "vector_calculus_curves.hpp"
 #include "integration.hpp"
@@ -13,6 +14,8 @@ VectorCalculusExprResult curve_integral_scalar_checked(
     const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
 {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                          context.limits().max_ast_nodes, "curve_integral_scalar");
     const std::string operation = "curve_integral_scalar";
     auto valid = vector_calculus_validate_curve_scalar_inputs(
         f, parametrization, t, a, b, context, operation);
@@ -26,15 +29,17 @@ VectorCalculusExprResult curve_integral_scalar_checked(
     }
 
     try {
-        return curve_integral_scalar_strict(
-            f, parametrization, t, a, b, context, operation);
+        return curve_integral_scalar_strict(f, parametrization, t, a, b, context, operation, transform_budget);
+    } catch (const CasError& error) {
+        return VectorCalculusExprResult::failure(error);
     } catch (const std::bad_alloc&) {
         return VectorCalculusExprResult::failure(CasErrc::ResourceLimit,
                                                  "curve integral allocation failed",
                                                  operation);
+    } catch (const std::length_error& error) {
+        return VectorCalculusExprResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& e) {
-        return VectorCalculusExprResult::failure(CasErrc::InternalInvariant,
-                                                 e.what(), operation);
+        return VectorCalculusExprResult::failure(CasErrc::InternalInvariant, e.what(), operation);
     }
 }
 
@@ -52,6 +57,9 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f) {
         throw std::invalid_argument("curve_integral_scalar: f must not be null");
     }
@@ -67,24 +75,24 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
 
     auto f_composed = f;
     for (size_t i = 0; i < dim; ++i) {
-        f_composed = f_composed->substitute(coord_vars[i], parametrization[i]);
+        f_composed = detail::make_expression_ptr(detail::substitute_node(detail::node(f_composed), coord_vars[i], detail::node(parametrization[i]), transform_budget));
     }
-    f_composed = f_composed->simplify();
+    f_composed = detail::make_expression_ptr(detail::normalize_node(detail::node(f_composed), transform_budget));
 
     std::shared_ptr<SymbolicExpr> speed_sq = nullptr;
     for (size_t i = 0; i < dim; ++i) {
-        auto deriv = parametrization[i]->differentiate(t);
+        auto deriv = detail::make_expression_ptr(detail::differentiate_node(detail::node(parametrization[i]), t, transform_budget));
         if (!deriv) {
             continue;
         }
-        deriv = deriv->simplify();
+        deriv = detail::make_expression_ptr(detail::normalize_node(detail::node(deriv), transform_budget));
         auto sq = SymbolicExpr::power(deriv, SymbolicExpr::number(2));
-        sq = sq->simplify();
+        sq = detail::make_expression_ptr(detail::normalize_node(detail::node(sq), transform_budget));
         if (!speed_sq) {
             speed_sq = sq;
         } else {
             speed_sq = SymbolicExpr::add(speed_sq, sq);
-            speed_sq = speed_sq->simplify();
+            speed_sq = detail::make_expression_ptr(detail::normalize_node(detail::node(speed_sq), transform_budget));
         }
     }
 
@@ -93,14 +101,13 @@ std::shared_ptr<SymbolicExpr> curve_integral_scalar(
     }
 
     auto speed = SymbolicExpr::sqrt(speed_sq);
-    speed = speed->simplify();
+    speed = detail::make_expression_ptr(detail::normalize_node(detail::node(speed), transform_budget));
 
     auto integrand = SymbolicExpr::multiply(f_composed, speed);
-    integrand = integrand->simplify();
+    integrand = detail::make_expression_ptr(detail::normalize_node(detail::node(integrand), transform_budget));
 
-    ComputationContext context;
-    return vector_calculus_integrate_with_fallback(
-        integrand, t, a, b, context);
+
+    return vector_calculus_integrate_with_fallback(integrand, t, a, b, context, transform_budget);
 }
 
 
@@ -110,6 +117,8 @@ VectorCalculusExprResult curve_integral_vector_checked(
     const std::shared_ptr<SymbolicExpr>& b,
     ComputationContext& context)
 {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                          context.limits().max_ast_nodes, "curve_integral_vector");
     const std::string operation = "curve_integral_vector";
     auto valid = vector_calculus_validate_curve_vector_inputs(
         F, parametrization, t, a, b, context, operation);
@@ -125,15 +134,17 @@ VectorCalculusExprResult curve_integral_vector_checked(
     }
 
     try {
-        return curve_integral_vector_strict(
-            F, parametrization, t, a, b, context, operation);
+        return curve_integral_vector_strict(F, parametrization, t, a, b, context, operation, transform_budget);
+    } catch (const CasError& error) {
+        return VectorCalculusExprResult::failure(error);
     } catch (const std::bad_alloc&) {
         return VectorCalculusExprResult::failure(CasErrc::ResourceLimit,
                                                  "curve integral allocation failed",
                                                  operation);
+    } catch (const std::length_error& error) {
+        return VectorCalculusExprResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& e) {
-        return VectorCalculusExprResult::failure(CasErrc::InternalInvariant,
-                                                 e.what(), operation);
+        return VectorCalculusExprResult::failure(CasErrc::InternalInvariant, e.what(), operation);
     }
 }
 
@@ -151,6 +162,9 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
     const std::string& t, const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (F.empty()) {
         throw std::invalid_argument("curve_integral_vector: F must not be empty");
     }
@@ -176,24 +190,24 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
 
         auto Fi_composed = F[i];
         for (size_t j = 0; j < dim; ++j) {
-            Fi_composed = Fi_composed->substitute(coord_vars[j], parametrization[j]);
+            Fi_composed = detail::make_expression_ptr(detail::substitute_node(detail::node(Fi_composed), coord_vars[j], detail::node(parametrization[j]), transform_budget));
         }
-        Fi_composed = Fi_composed->simplify();
+        Fi_composed = detail::make_expression_ptr(detail::normalize_node(detail::node(Fi_composed), transform_budget));
 
-        auto ri_prime = parametrization[i]->differentiate(t);
+        auto ri_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(parametrization[i]), t, transform_budget));
         if (!ri_prime) {
             continue;
         }
-        ri_prime = ri_prime->simplify();
+        ri_prime = detail::make_expression_ptr(detail::normalize_node(detail::node(ri_prime), transform_budget));
 
         auto term = SymbolicExpr::multiply(Fi_composed, ri_prime);
-        term = term->simplify();
+        term = detail::make_expression_ptr(detail::normalize_node(detail::node(term), transform_budget));
 
         if (!dot_product) {
             dot_product = term;
         } else {
             dot_product = SymbolicExpr::add(dot_product, term);
-            dot_product = dot_product->simplify();
+            dot_product = detail::make_expression_ptr(detail::normalize_node(detail::node(dot_product), transform_budget));
         }
     }
 
@@ -201,9 +215,8 @@ std::shared_ptr<SymbolicExpr> curve_integral_vector(
         return SymbolicExpr::number(0);
     }
 
-    ComputationContext context;
-    return vector_calculus_integrate_with_fallback(
-        dot_product, t, a, b, context);
+
+    return vector_calculus_integrate_with_fallback(dot_product, t, a, b, context, transform_budget);
 }
 
 }

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "matrix_decomposition.hpp"
 #include "matrix_quadratic_form.hpp"
 #include "symbolic_matrix.hpp"
@@ -14,7 +15,7 @@ static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n)
 static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt &n) {
     return LMCAS::detail::make_expression_ptr(
         LMCAS::detail::make_node<NumberNode>(
-            std::variant<BigInt, Rational, lmmc_real_t>{std::in_place_type<BigInt>, n}));
+            std::variant<BigInt, Rational>{std::in_place_type<BigInt>, n}));
 }
 
 static std::shared_ptr<SymbolicExpr> exact_dense_matrix(
@@ -69,10 +70,10 @@ static void expect_exact_matrix_entries(const MatrixNode &actual, const MatrixNo
 static void expect_exact_matrix(const ExprPtr &actual, const ExprPtr &expected,
                                 const std::string &message) {
     auto a = actual ? std::dynamic_pointer_cast<const MatrixNode>(
-                          detail::node(actual->simplify()))
+                          detail::node(LMCAS::simplify(actual).value()))
                     : nullptr;
     auto b = expected ? std::dynamic_pointer_cast<const MatrixNode>(
-                            detail::node(expected->simplify()))
+                            detail::node(LMCAS::simplify(expected).value()))
                       : nullptr;
     if (!a || !b) {
         ADD_FAILURE() << (message + " dimensions agree");
@@ -106,10 +107,9 @@ TEST(LmcasMatrixDecomposition, LuRoundtrip) {
     auto A = mat2(4, 3, 6, 3);
     auto decomposition = lu_decomposition_checked(A);
     ASSERT_TRUE(decomposition.has_value()) << ("checked LU succeeds");
-    auto prod = SymbolicExpr::multiply(
-                    decomposition.value().L, decomposition.value().U)
-                    ->simplify();
-    EXPECT_TRUE(test_expression_text(prod, A->simplify())) << ("L*U == A");
+    auto prod = LMCAS::simplify(SymbolicExpr::multiply(
+                    decomposition.value().L, decomposition.value().U)).value();
+    EXPECT_TRUE(test_expression_text(prod, LMCAS::simplify(A).value())) << ("L*U == A");
 }
 
 TEST(LmcasMatrixDecomposition, GramSchmidtOrthogonality) {
@@ -123,7 +123,7 @@ TEST(LmcasMatrixDecomposition, GramSchmidtOrthogonality) {
     for (size_t k = 0; k < 3; ++k)
         dot = SymbolicExpr::add(dot, SymbolicExpr::multiply(basis[0][k], basis[1][k]));
     {
-        const auto actual_expr = dot->simplify();
+        const auto actual_expr = LMCAS::simplify(dot).value();
         const auto expected_expr = num(0);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("gram_schmidt vectors orthogonal");
     }
@@ -161,7 +161,7 @@ TEST(LmcasMatrixDecomposition, FrobeniusNorm) {
     auto A = mat2(3, 0, 0, 4);
     auto fn = matrix_norm(A, "frobenius");
     {
-        const auto actual_expr = fn->simplify();
+        const auto actual_expr = LMCAS::simplify(fn).value();
         const auto expected_expr = num(5);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("frobenius([[3,0],[0,4]]) = 5");
     }
@@ -171,13 +171,13 @@ TEST(LmcasMatrixDecomposition, InducedNorms) {
     auto A = mat2(1, 2, 3, 4);
     auto n1 = matrix_norm(A, "1");
     {
-        const auto actual_expr = n1->simplify();
+        const auto actual_expr = LMCAS::simplify(n1).value();
         const auto expected_expr = num(6);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("1-norm = max col sum = 2+4 = 6");
     }
     auto ninf = matrix_norm(A, "inf");
     {
-        const auto actual_expr = ninf->simplify();
+        const auto actual_expr = LMCAS::simplify(ninf).value();
         const auto expected_expr = num(7);
         EXPECT_TRUE(test_expression_text(actual_expr, expected_expr)) << ("inf-norm = max row sum = 3+4 = 7");
     }
@@ -288,11 +288,10 @@ TEST(LmcasMatrixDecomposition, DiagonalJordan) {
                               "checked Jordan form exists for a diagonal matrix")) {
         auto inverse =
             matrix_inverse_checked(decomposition.value().P).value();
-        auto recon = SymbolicExpr::multiply(
+        auto recon = LMCAS::simplify(SymbolicExpr::multiply(
                          decomposition.value().P,
                          SymbolicExpr::multiply(
-                             decomposition.value().J, inverse))
-                         ->simplify();
+                             decomposition.value().J, inverse))).value();
         expect_exact_matrix(recon, A, "P J P^-1 == A");
     }
 }
@@ -301,9 +300,9 @@ TEST(LmcasMatrixDecomposition, CheckedLu) {
     auto A = mat2(4, 3, 6, 3);
     auto lu = lu_decomposition_checked(A);
     ASSERT_TRUE(lu.has_value()) << "checked LU succeeds";
-    auto permuted = SymbolicExpr::multiply(lu.value().P, A)->simplify();
+    auto permuted = LMCAS::simplify(SymbolicExpr::multiply(lu.value().P, A)).value();
     auto prod =
-        SymbolicExpr::multiply(lu.value().L, lu.value().U)->simplify();
+        LMCAS::simplify(SymbolicExpr::multiply(lu.value().L, lu.value().U)).value();
     EXPECT_TRUE(test_expression_text(prod, permuted))
         << "checked PLU reconstructs P*A";
 }
@@ -333,10 +332,9 @@ TEST(LmcasMatrixDecomposition, CheckedJordan) {
             << "checked Jordan returns invertible P";
         ASSERT_TRUE(inverse.value() != nullptr);
         auto reconstructed =
-            SymbolicExpr::multiply(
+            LMCAS::simplify(SymbolicExpr::multiply(
                 jordan.value().P,
-                SymbolicExpr::multiply(jordan.value().J, inverse.value()))
-                ->simplify();
+                SymbolicExpr::multiply(jordan.value().J, inverse.value()))).value();
         expect_exact_matrix(
             reconstructed, mat2(2, 0, 0, 3),
             "checked Jordan reconstructs exact diagonal input");
@@ -350,10 +348,9 @@ TEST(LmcasMatrixDecomposition, CheckedJordanBlock) {
                               "checked Jordan accepts a non-diagonal Jordan block")) {
         auto Pinv = matrix_inverse_checked(block_form.value().P).value();
         auto reconstructed = Pinv
-                                 ? SymbolicExpr::multiply(
+                                 ? LMCAS::simplify(SymbolicExpr::multiply(
                                        block_form.value().P,
-                                       SymbolicExpr::multiply(block_form.value().J, Pinv))
-                                       ->simplify()
+                                       SymbolicExpr::multiply(block_form.value().J, Pinv))).value()
                                  : nullptr;
         expect_exact_matrix(reconstructed, jordan_block,
                             "Jordan block satisfies A=P*J*P^-1");
@@ -364,11 +361,10 @@ TEST(LmcasMatrixDecomposition, CheckedSvd) {
     auto svd = svd_decomposition_checked(mat2(2, 0, 0, 3));
     ASSERT_TRUE((svd.has_value())) << ("checked SVD succeeds on exact nonnegative diagonal matrix");
     if (svd) {
-        auto reconstructed = SymbolicExpr::multiply(
+        auto reconstructed = LMCAS::simplify(SymbolicExpr::multiply(
                                  svd.value().U,
-                                 SymbolicExpr::multiply(svd.value().S, SymbolicExpr::transpose(svd.value().V)))
-                                 ->simplify();
-        EXPECT_TRUE(test_expression_text(reconstructed, mat2(2, 0, 0, 3)->simplify())) << ("checked SVD reconstructs exact diagonal input");
+                                 SymbolicExpr::multiply(svd.value().S, SymbolicExpr::transpose(svd.value().V)))).value();
+        EXPECT_TRUE(test_expression_text(reconstructed, LMCAS::simplify(mat2(2, 0, 0, 3)).value())) << ("checked SVD reconstructs exact diagonal input");
     }
 }
 
@@ -380,13 +376,11 @@ TEST(LmcasMatrixDecomposition, LuDomain) {
     auto needs_pivot_lu = lu_decomposition_checked(mat2(0, 1, 1, 0));
     ASSERT_TRUE((needs_pivot_lu.has_value())) << ("checked PLU succeeds when row pivoting is required");
     if (needs_pivot_lu) {
-        auto pivoted = SymbolicExpr::multiply(
-                           needs_pivot_lu.value().P, mat2(0, 1, 1, 0))
-                           ->simplify();
-        auto reconstructed = SymbolicExpr::multiply(
+        auto pivoted = LMCAS::simplify(SymbolicExpr::multiply(
+                           needs_pivot_lu.value().P, mat2(0, 1, 1, 0))).value();
+        auto reconstructed = LMCAS::simplify(SymbolicExpr::multiply(
                                  needs_pivot_lu.value().L,
-                                 needs_pivot_lu.value().U)
-                                 ->simplify();
+                                 needs_pivot_lu.value().U)).value();
         EXPECT_TRUE(test_expression_text(reconstructed, pivoted)) << ("pivoting PLU satisfies P*A=L*U");
     }
 }
@@ -565,7 +559,7 @@ TEST(LmcasMatrixDecomposition, SymbolicNormCandidates) {
         }
         auto symbolic = matrix_norm(SymbolicExpr::matrix({{num(1), num(0)}, {num(0), x}}), type);
         for (const auto point : {0, -2}) {
-            auto value = evaluate_numeric(*symbolic->substitute("x", num(point)));
+            auto value = evaluate_numeric(*LMCAS::substitute(symbolic, "x", num(point)).value());
             ASSERT_TRUE((value.has_value())) << ("symbolic norm specializes");
             const auto actual_value = value.value().value;
             const auto expected_value = point == 0 ? 1.0 : 2.0;

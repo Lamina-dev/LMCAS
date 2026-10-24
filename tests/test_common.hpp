@@ -295,9 +295,6 @@ inline std::optional<double> test_numeric_power(
 }
 
 inline std::optional<double> test_numeric_number(const NumberNode &number) {
-    if (std::holds_alternative<lmmc_real_t>(number.value())) {
-        return std::get<lmmc_real_t>(number.value());
-    }
     if (std::holds_alternative<BigInt>(number.value())) {
         return std::get<BigInt>(number.value()).to_double();
     }

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "symbolic.hpp"
 #include "parametric_solver.hpp"
 #include "assumption_context.hpp"
@@ -12,6 +14,7 @@
 #include "poly_utils.hpp"
 #include "solve_strategies.hpp"
 #include "solve_polynomial.hpp"
+#include "internal/polynomial_solver_support.hpp"
 #include "solve_transcendental.hpp"
 #include "solve_mixed_transcendental.hpp"
 #include "newton_raphson.hpp"
@@ -24,6 +27,7 @@
 #include "internal/complex_quadratic.hpp"
 #include "internal/transcendental_solver_support.hpp"
 #include "internal/normalization_utils.hpp"
+#include "internal/solver_support.hpp"
 #include <limits>
 #include "internal/polynomial_solver_support.hpp"
 
@@ -52,29 +56,6 @@ static SolveResult conditional_equation(const ExprPtr& original, const std::stri
     return SolutionSet{ConditionalSolutions{ConditionSet{variable, equation_predicate(original), {}}}};
 }
 
-class ApproximateSolverInput final : public detail::RecursiveSymbolicVisitor {
-public:
-    bool found = false;
-    void visit(const NumberNode& number) override {
-        found = found || std::holds_alternative<lmmc_real_t>(number.value());
-    }
-};
-
-static Result<void> validate_symbolic_polynomial_input(
-    const ExprPtr& original, const SolveOptions& options) {
-    if (options.allow_numeric) {
-        return Result<void>::success();
-    }
-    ApproximateSolverInput approximate;
-    detail::node(original)->accept(approximate);
-    if (!approximate.found) {
-        return Result<void>::success();
-    }
-    return Result<void>::failure(
-        CasErrc::Inconclusive,
-        "approximate polynomial input requires allow_numeric",
-        "solve.polynomial");
-}
 
 static ExprPtr polynomial_relation(
     const ExprPtr& left, const ExprPtr& right, RelationOp op) {
@@ -117,14 +98,16 @@ static SolveResult conditional_linear_polynomial(
 static SolveResult solve_symbolic_quadratic(
     const Polynomial<SymbolicPolyCoeff>& polynomial,
     const ExprPtr& leading, const FactsQuery& facts,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto linear = get_coeff(polynomial, 1);
     auto constant = get_coeff(polynomial, 0);
-    auto discriminant = SymbolicExpr::add(
+    auto discriminant = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
         SymbolicExpr::power(linear, SymbolicExpr::number(2)),
         SymbolicExpr::multiply(
             SymbolicExpr::number(-4),
-            SymbolicExpr::multiply(leading, constant)))->simplify();
+            SymbolicExpr::multiply(leading, constant)))), transform_budget));
     auto nonzero = detail::query_nonzero_value(
         detail::node(discriminant), facts, Domain::Complex, context);
     if (!nonzero) {
@@ -140,17 +123,17 @@ static SolveResult solve_symbolic_quadratic(
         SymbolicExpr::multiply(SymbolicExpr::number(-1), linear);
     auto denominator =
         SymbolicExpr::multiply(SymbolicExpr::number(2), leading);
-    auto positive = SymbolicExpr::divide(
+    auto positive = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
         SymbolicExpr::add(negative_linear, radical),
-        denominator)->simplify();
-    auto negative = SymbolicExpr::divide(
+        denominator)), transform_budget));
+    auto negative = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
         SymbolicExpr::add(
             negative_linear,
             SymbolicExpr::multiply(
                 SymbolicExpr::number(-1), radical)),
-        denominator)->simplify();
+        denominator)), transform_budget));
     auto repeated =
-        SymbolicExpr::divide(negative_linear, denominator)->simplify();
+        detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(negative_linear, denominator)), transform_budget));
 
     if (nonzero.value() == Tribool::False) {
         return SolutionSet{FiniteSolutions{{
@@ -171,16 +154,22 @@ static SolveResult solve_symbolic_quadratic(
         FiniteSolution{positive, 1, {distinct}},
         FiniteSolution{negative, 1, {distinct}},
         FiniteSolution{positive, 2, {coincident}}}}};
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_symbolic_quadratic");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_symbolic_quadratic");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_symbolic_quadratic");
 }
 
 static SolveResult solve_symbolic_polynomial_set(
     const Polynomial<SymbolicPolyCoeff>& polynomial,
     const ExprPtr& original, const std::string& variable,
-    ComputationContext& context, const SolveOptions& options) {
-    auto valid = validate_symbolic_polynomial_input(original, options);
-    if (!valid) {
-        return SolveResult::failure(valid.error());
-    }
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     std::optional<detail::AssumptionFacts> adapter;
     if (context.assumptions()) {
@@ -191,7 +180,7 @@ static SolveResult solve_symbolic_polynomial_set(
         : detail::no_facts();
     int degree = polynomial.degree();
     while (degree >= 0) {
-        auto leading = get_coeff(polynomial, degree)->simplify();
+        auto leading = detail::make_expression_ptr(detail::normalize_node(detail::node(get_coeff(polynomial, degree)), transform_budget));
         auto nonzero = detail::query_nonzero_value(
             detail::node(leading), facts, Domain::Complex, context);
         if (!nonzero) {
@@ -214,15 +203,23 @@ static SolveResult solve_symbolic_polynomial_set(
             return solve_symbolic_quadratic(
                 polynomial, leading, facts, context);
         }
-        auto value = SymbolicExpr::divide(
+        auto value = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
             SymbolicExpr::multiply(
                 SymbolicExpr::number(-1),
                 get_coeff(polynomial, 0)),
-            leading)->simplify();
+            leading)), transform_budget));
         return SolutionSet{FiniteSolutions{{
             FiniteSolution{value, 1, {}}}}};
     }
     return SolutionSet{UniversalSolutions{}};
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_symbolic_polynomial_set");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_symbolic_polynomial_set");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_symbolic_polynomial_set");
 }
 
 static SolveResult solve_product_factor(const detail::SymbolicNodePtr& node,
@@ -350,49 +347,23 @@ static SolveResult collect_exact_solutions(
         SolutionSet{FiniteSolutions{std::move(solutions)}});
 }
 
-static SolveVectorResult certified_quartic_roots(const Polynomial<Rational>& remainder,
-    const ExprPtr& expression, const std::string& var, ComputationContext& context) {
-    auto candidates = solve_quartic(
-        SymbolicExpr::number(remainder.coeffs[4]),
-        SymbolicExpr::number(remainder.coeffs[3]),
-        SymbolicExpr::number(remainder.coeffs[2]),
-        SymbolicExpr::number(remainder.coeffs[1]),
-        SymbolicExpr::number(remainder.coeffs[0]), var);
-    bool certified = candidates.size() == 4;
-    for (std::size_t i = 0; certified && i < candidates.size(); ++i) {
-        if (contains_inexact_number(detail::node(candidates[i]))) {
-            certified = false;
-            break;
-        }
-        auto proof = check_zero_residual(substitute_raw(expression, var, candidates[i]), context);
-        if (!proof) { return SolveVectorResult::failure(proof.error()); }
-        certified = std::holds_alternative<ProvedZeroResidual>(proof.value());
-        for (std::size_t j = 0; certified && j < i; ++j) {
-            auto equal = detail::compare_pointwise_values(
-                candidates[i], candidates[j], context, Domain::Complex);
-            if (!equal) { return SolveVectorResult::failure(equal.error()); }
-            certified = equal.value() == Tribool::False;
-        }
-    }
-    if (certified) { return candidates; }
-    return std::vector<ExprPtr>{};
-}
 
 static SolveVectorResult solve_higher_exact_roots(const Polynomial<Rational>& remainder,
-    bool bounded_candidates, const std::string& var, ComputationContext& context) {
+    const std::string& var, ComputationContext& context) {
+    if (remainder.degree() == 4 &&
+        remainder.coeffs[3] == Rational(0) &&
+        remainder.coeffs[1] == Rational(0)) {
+        return polynomial_solver_detail::solve_biquadratic_impl(
+            SymbolicExpr::number(remainder.coeffs[4]),
+            SymbolicExpr::number(remainder.coeffs[2]),
+            SymbolicExpr::number(remainder.coeffs[0]), var, context);
+    }
     auto expression = poly_to_symbolic(remainder);
     std::vector<ExprPtr> represented_roots;
-    if (remainder.degree() == 4 && bounded_candidates) {
-        auto candidates = certified_quartic_roots(remainder, expression, var, context);
-        if (!candidates) { return SolveVectorResult::failure(candidates.error()); }
-        represented_roots = std::move(candidates.value());
-    }
-    if (represented_roots.empty()) {
-        for (int index = 0; index < remainder.degree(); ++index) {
-            auto root = make_rootof_checked(expression, var, static_cast<std::size_t>(index), context);
-            if (!root) { return SolveVectorResult::failure(root.error()); }
-            represented_roots.push_back(std::move(root.value()));
-        }
+    for (int index = 0; index < remainder.degree(); ++index) {
+        auto root = make_rootof_checked(expression, var, static_cast<std::size_t>(index), context);
+        if (!root) { return SolveVectorResult::failure(root.error()); }
+        represented_roots.push_back(std::move(root.value()));
     }
     return represented_roots;
 }
@@ -424,7 +395,7 @@ static SolveVectorResult solve_exact_factor(Polynomial<Rational> remainder,
                 SymbolicFactory::create_complex(detail::node(root.real), detail::node(root.imag))));
         }
     } else if (remainder.degree() > 2) {
-        auto represented_roots = solve_higher_exact_roots(remainder, bounded_candidates, var, context);
+        auto represented_roots = solve_higher_exact_roots(remainder, var, context);
         if (!represented_roots) { return SolveVectorResult::failure(represented_roots.error()); }
         factor_roots.insert(factor_roots.end(), represented_roots.value().begin(), represented_roots.value().end());
     }
@@ -466,7 +437,7 @@ static SolveResult dispatch_equation(const ExprPtr& expr, const ExprPtr& f_expr,
     }
     auto symbolic = symbolic_to_poly<SymbolicPolyCoeff>(f_expr, var);
     if (symbolic) {
-        auto solved = solve_symbolic_polynomial_set(symbolic.value(), f_expr, var, context, opts);
+        auto solved = solve_symbolic_polynomial_set(symbolic.value(), f_expr, var, context);
         if (!solved) { return solved; }
         return detail::finalize_solution_set(expr, var, std::move(solved.value()), context, Domain::Complex, opts);
     }
@@ -486,7 +457,7 @@ LMCAS::SolveResult solve_equation(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
-    const SolveOptions& opts) {
+    const SolveOptions& opts) try {
     constexpr const char* operation = "solve_equation";
     if (!expr || !LMCAS::detail::node(expr)) {
         return SolveResult::failure(
@@ -517,6 +488,16 @@ LMCAS::SolveResult solve_equation(
     }
 
     return dispatch_equation(expr, f_expr, var, context, opts);
+}
+catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit,
+        "equation solve allocation failed", "solve_equation");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_equation");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_equation");
 }
 
 LMCAS::SolveResult solve_equation(
@@ -575,7 +556,9 @@ static SolveResult solve_set_core(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
-    const SolveOptions& opts) {
+    const SolveOptions& opts) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "solve_dispatch_set";
     if (!expr || !LMCAS::detail::node(expr)) {
         return SolveResult::failure(CasErrc::InvalidArgument,
@@ -588,7 +571,7 @@ static SolveResult solve_set_core(
                                           operation);
     }
 
-    auto simplified = expr->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expr), transform_budget));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return SolveResult::failure(CasErrc::InvalidArgument,
                                           "expression simplification failed",
@@ -607,7 +590,7 @@ static SolveResult solve_set_core(
 
     auto polynomial = symbolic_to_poly<SymbolicPolyCoeff>(f_expr, var);
     if (polynomial) {
-        return solve_symbolic_polynomial_set(polynomial.value(), expr, var, context, opts);
+        return solve_symbolic_polynomial_set(polynomial.value(), expr, var, context);
     }
     if (polynomial.error().code != CasErrc::UnsupportedExpression) {
         return SolveResult::failure(polynomial.error());
@@ -626,13 +609,21 @@ static SolveResult solve_set_core(
 
     return SolveResult::failure(CasErrc::Inconclusive,
         "expression is outside the supported finite exact solve domain", operation);
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_dispatch_set");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "solve_dispatch_set");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "solve_dispatch_set");
 }
 
 LMCAS::FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& var,
     ComputationContext& context,
-    const SolveOptions& opts) {
+    const SolveOptions& opts) try {
     constexpr const char* operation = "solve_finite_projection";
     auto solved = solve_equation(expr, var, context, opts);
     if (!solved) {
@@ -665,6 +656,16 @@ LMCAS::FiniteSolveResult solve_finite_checked(
     }
     return SolveVectorResult::success(std::move(values));
 }
+catch (const CasError& error) {
+    return SolveVectorResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveVectorResult::failure(CasErrc::ResourceLimit,
+        "finite solution projection allocation failed", "solve_finite_projection");
+} catch (const std::length_error& error) {
+    return SolveVectorResult::failure(CasErrc::ResourceLimit, error.what(), "solve_finite_projection");
+} catch (const std::exception& error) {
+    return SolveVectorResult::failure(CasErrc::InternalInvariant, error.what(), "solve_finite_projection");
+}
 
 LMCAS::FiniteSolveResult solve_finite_checked(
     const std::shared_ptr<SymbolicExpr>& expression,
@@ -681,6 +682,9 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>
 SymbolicExpr::solve_system(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
     const std::vector<std::string>& vars) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<SymbolicExpr> values;
     values.reserve(equations.size());
     for (const auto& equation : equations) {
@@ -698,12 +702,12 @@ SymbolicExpr::solve_system(
                 SymbolicExpr::multiply(
                     SymbolicExpr::number(-1),
                     LMCAS::detail::make_expression_ptr(relation->right())));
-            values.push_back(*normalized->simplify());
+            values.push_back(*detail::make_expression_ptr(detail::normalize_node(detail::node(normalized), transform_budget)));
         } else {
             values.push_back(*equation);
         }
     }
-    auto solved = LMCAS::Solver::solve_linear_system(values, vars);
+    auto solved = solver_detail::project_unconditional_linear_system(values, vars, context);
     if (solved.empty()) {
         return {};
     }

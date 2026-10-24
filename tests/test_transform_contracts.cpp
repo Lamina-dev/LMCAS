@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transform_engine.hpp"
 
@@ -55,7 +56,7 @@ TEST(TransformContracts, InverseFourierExactDecayRoundTrip) {
         FunctionNode::FuncType::Abs,
         std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(var("t"))}));
     auto expected = SymbolicExpr::exp(SymbolicExpr::multiply(num(-1), abs_t));
-    EXPECT_TRUE(detail::node(value->simplify())->equals(*detail::node(expected->simplify())));
+    EXPECT_TRUE(detail::node(LMCAS::simplify(value).value())->equals(*detail::node(LMCAS::simplify(expected).value())));
     EXPECT_TRUE(result.value().value.conditions.empty());
 
     auto unsupported = inverse_fourier_transform_checked(
@@ -94,14 +95,14 @@ static void expect_z_roc_boundary(const EvaluatedTransform &transform, double ra
     auto left = detail::make_expression_ptr(relation->left());
     auto right = detail::make_expression_ptr(relation->right());
     {
-        const double actual_value = (right->simplify()->to_numeric());
+        const double actual_value = (LMCAS::simplify(right).value()->to_numeric());
         const double expected_value = (radius);
         const double tolerance = (1e-12);
         EXPECT_TRUE(std::isfinite(actual_value));
         EXPECT_NEAR(actual_value, expected_value, tolerance);
     }
-    EXPECT_NEAR(left->substitute("z", num(-3))->simplify()->to_numeric(), 3.0, 1e-12) << "ROC uses modulus for negative z";
-    EXPECT_NEAR(left->substitute("z", num(0))->simplify()->to_numeric(), 0.0, 1e-12) << "origin remains outside the convergence region";
+    EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(left, "z", num(-3)).value()).value()->to_numeric(), 3.0, 1e-12) << "ROC uses modulus for negative z";
+    EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(left, "z", num(0)).value()).value()->to_numeric(), 0.0, 1e-12) << "origin remains outside the convergence region";
 }
 
 TEST(TransformContracts, ZConstantRoc) {

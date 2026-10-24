@@ -87,22 +87,4 @@ struct EvaluatedTransform {
 };
 using TransformEngineResult = Result<Verified<EvaluatedTransform>>;
 
-struct ClosedFormIntegral {
-    ExprPtr expression;
-    std::vector<ExprPtr> conditions;
-};
-
-/**
- * @brief 成功保留未求值积分。
- * 闭式、收敛性及初等原函数不存在性的证明需另行提供。
- */
-struct UnevaluatedIntegral {
-    ExprPtr integral;
-};
-
-using IntegralOutcome = std::variant<
-    Verified<ClosedFormIntegral>,
-    UnevaluatedIntegral>;
-using IntegralResult = Result<IntegralOutcome>;
-
 } // namespace LMCAS

@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/calculus_utils_support.hpp"
 #include "internal/symbolic_ast.hpp"
 
@@ -144,6 +145,9 @@ namespace LMCAS {
 std::shared_ptr<SymbolicExpr> log_differentiate(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f || !LMCAS::detail::node(f)) {
         return nullptr;
     }
@@ -153,28 +157,34 @@ std::shared_ptr<SymbolicExpr> log_differentiate(
 
     /// 对 ln(f) 求导 - 化简器会自动应用对数规则
     /// (ln(a*b) = ln(a)+ln(b), ln(a^n) = n*ln(a))
-    auto ln_f_simplified = ln_f->simplify();
-    auto d_ln_f = ln_f_simplified->differentiate(var);
+    auto ln_f_simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(ln_f), transform_budget));
+    auto d_ln_f = detail::make_expression_ptr(detail::differentiate_node(detail::node(ln_f_simplified), var, transform_budget));
 
     /// 结果 = f * d/dx[ln(f)]
     auto result = SymbolicExpr::multiply(f, d_ln_f);
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 std::shared_ptr<SymbolicExpr> differential(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f || !LMCAS::detail::node(f)) {
         return nullptr;
     }
 
     /// 微分 df = f'(var) * dx,返回系数 f'(var)
-    return f->differentiate(var);
+    return detail::make_expression_ptr(detail::differentiate_node(detail::node(f), var, transform_budget));
 }
 
 std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> total_differential(
     const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars)
 {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> result;
     if (!f || !LMCAS::detail::node(f)) {
         return result;
@@ -182,7 +192,7 @@ std::vector<std::pair<std::shared_ptr<SymbolicExpr>, std::string>> total_differe
 
     result.reserve(vars.size());
     for (const auto& v : vars) {
-        auto partial = f->differentiate(v);
+        auto partial = detail::make_expression_ptr(detail::differentiate_node(detail::node(f), v, transform_budget));
         result.emplace_back(partial, v);
     }
     return result;

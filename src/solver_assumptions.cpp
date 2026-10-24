@@ -100,12 +100,7 @@ static bool numeric_sign_excludes(double value, const AssumptionContext& ctx,
 }
 
 static const NumberNode* exact_scalar_number(const SymbolicNode* node) {
-    const auto* number = dynamic_cast<const NumberNode*>(node);
-    if (number && (std::holds_alternative<BigInt>(number->value()) ||
-                   std::holds_alternative<Rational>(number->value()))) {
-        return number;
-    }
-    return nullptr;
+    return dynamic_cast<const NumberNode*>(node);
 }
 
 static const NumberNode* exact_scalar_radicand(const SymbolicNode* node) {
@@ -282,14 +277,17 @@ AssumptionSolveResult solve_with_assumptions_checked(
     try {
         return solve_with_assumptions_impl(
             equation, variable, assumptions, context);
+    } catch (const CasError& error) {
+        return AssumptionSolveResult::failure(error);
     } catch (const std::bad_alloc&) {
         return AssumptionSolveResult::failure(
             CasErrc::ResourceLimit,
             "allocation failed while solving with assumptions",
             operation);
+    } catch (const std::length_error& error) {
+        return AssumptionSolveResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& ex) {
-        return AssumptionSolveResult::failure(
-            CasErrc::InternalInvariant, ex.what(), operation);
+        return AssumptionSolveResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
     }
 }
 

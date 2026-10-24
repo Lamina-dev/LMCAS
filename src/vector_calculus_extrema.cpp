@@ -1,11 +1,12 @@
+#include "internal/expression_transform.hpp"
 #include "internal/vector_calculus_support.hpp"
 #include "vector_calculus_extrema.hpp"
 #include "vector_calculus_matrices.hpp"
-#include "internal/visitors/differentiation_visitor.hpp"
 #include "integration.hpp"
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
+#include "internal/solver_support.hpp"
 #include "symbolic_matrix.hpp"
 #include "internal/symbolic_ast.hpp"
 
@@ -23,12 +24,18 @@ namespace LMCAS {
 
 using namespace vector_calculus_detail;
 
+static std::vector<CriticalPoint> find_extrema_impl(
+    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget);
+
 static bool vector_calculus_evaluate_hessian_at_point(
     const std::shared_ptr<SymbolicExpr>& H,
     const std::vector<std::string>&,
     const std::map<std::string, std::shared_ptr<SymbolicExpr>>& pt,
     size_t n,
-    std::vector<double>& numeric_H)
+    std::vector<double>& numeric_H, ComputationContext& context,
+    detail::RewriteBudget& transform_budget)
 {
     auto mat_node = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(H));
     if (!mat_node || mat_node->rows() != n || mat_node->cols() != n) {
@@ -46,18 +53,18 @@ static bool vector_calculus_evaluate_hessian_at_point(
             auto elem = LMCAS::detail::make_expression_ptr(elem_node);
             /// 代入临界点坐标
             for (const auto& [var_name, val] : pt) {
-                elem = elem->substitute(var_name, val);
+                elem = detail::make_expression_ptr(detail::substitute_node(detail::node(elem), var_name, detail::node(val), transform_budget));
                 if (!elem) {
                     return false;
                 }
             }
-            elem = elem->simplify();
+            elem = detail::make_expression_ptr(detail::normalize_node(detail::node(elem), transform_budget));
             if (!elem) {
                 return false;
             }
 
             if (!vector_calculus_checked_finite_numeric(
-                    elem, numeric_H[i * n + j])) {
+                    elem, numeric_H[i * n + j], context)) {
                 return false;
             }
         }
@@ -113,7 +120,9 @@ static std::shared_ptr<SymbolicExpr> symbolic_hessian(
 }
 
 static CriticalPointClassification classify_hessian_eigenvalues(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& eigenvals, double tol)
+    const std::vector<std::shared_ptr<SymbolicExpr>>& eigenvals, double tol,
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget)
 {
     bool all_positive = true;
     bool all_negative = true;
@@ -123,9 +132,9 @@ static CriticalPointClassification classify_hessian_eigenvalues(
         if (!ev) {
             return CriticalPointClassification::Inconclusive;
         }
-        auto ev_simplified = ev->simplify();
+        auto ev_simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(ev), transform_budget));
         double val = 0.0;
-        if (!vector_calculus_checked_finite_numeric(ev_simplified, val)) {
+        if (!vector_calculus_checked_finite_numeric(ev_simplified, val, context)) {
             return CriticalPointClassification::Inconclusive;
         }
 
@@ -155,7 +164,8 @@ static CriticalPointClassification classify_hessian_eigenvalues(
 // The 1e-10 threshold matches the existing real-eigenvalue classification
 // tolerance used by the one- and two-dimensional paths.
 static CriticalPointClassification vector_calculus_classify_critical_point(
-    const std::vector<double>& numeric_H, size_t n)
+    const std::vector<double>& numeric_H, size_t n, ComputationContext& context,
+    detail::RewriteBudget& transform_budget)
 {
     const double tol = 1e-10;
     if (n == 1) {
@@ -172,11 +182,15 @@ static CriticalPointClassification vector_calculus_classify_critical_point(
         return classify_hessian_pair(numeric_H, tol);
     }
     auto matrix = symbolic_hessian(numeric_H, n, tol);
-    auto eigenvalues = matrix_eigenvalues_checked(matrix);
+    auto eigenvalues = matrix_eigenvalues_checked(matrix, context);
     if (!eigenvalues) {
+        if (eigenvalues.error().code != CasErrc::Inconclusive &&
+            eigenvalues.error().code != CasErrc::UnsupportedExpression) {
+            throw eigenvalues.error();
+        }
         return CriticalPointClassification::Inconclusive;
     }
-    return classify_hessian_eigenvalues(eigenvalues.value(), tol);
+    return classify_hessian_eigenvalues(eigenvalues.value(), tol, context, transform_budget);
 }
 
 
@@ -185,6 +199,8 @@ ExtremaResult find_extrema_checked(
     const std::vector<std::string>& vars,
     ComputationContext& context)
 {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                          context.limits().max_ast_nodes, "find_extrema");
     const std::string operation = "find_extrema";
     auto valid = vector_calculus_validate_expr_vars(f, vars, context, operation);
     if (!valid) {
@@ -204,14 +220,14 @@ ExtremaResult find_extrema_checked(
         std::vector<std::shared_ptr<SymbolicExpr>> gradient;
         gradient.reserve(vars.size());
         for (const auto& var : vars) {
-            auto partial = vector_calculus_differentiate_strict(f, var, operation);
+            auto partial = vector_calculus_differentiate_strict(f, var, operation, transform_budget);
             if (!partial) {
                 return ExtremaResult::failure(partial.error());
             }
             gradient.push_back(std::move(partial.value()));
         }
 
-        auto extrema = find_extrema(f, vars);
+        auto extrema = find_extrema_impl(f, vars, context, transform_budget);
         if (extrema.empty()) {
             return ExtremaResult::failure(
                 CasErrc::Inconclusive,
@@ -227,7 +243,7 @@ ExtremaResult find_extrema_checked(
                     operation);
             }
             for (const auto& partial : gradient) {
-                if (!vector_calculus_expr_zero_after_substitution(partial, cp.point)) {
+                if (!vector_calculus_expr_zero_after_substitution(partial, cp.point, context, transform_budget)) {
                     return ExtremaResult::failure(
                         CasErrc::Inconclusive,
                         "extrema candidate does not verify against the gradient",
@@ -242,16 +258,16 @@ ExtremaResult find_extrema_checked(
             }
         }
         return ExtremaResult::success(std::move(extrema));
+    } catch (const CasError& error) {
+        return ExtremaResult::failure(error);
     } catch (const std::bad_alloc&) {
         return ExtremaResult::failure(CasErrc::ResourceLimit,
                                       "extrema allocation failed",
                                       operation);
-    } catch (const detail::UnsupportedDifferentiation& error) {
-        return ExtremaResult::failure(
-            CasErrc::UnsupportedExpression, error.what(), operation);
+    } catch (const std::length_error& error) {
+        return ExtremaResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& e) {
-        return ExtremaResult::failure(CasErrc::InternalInvariant,
-                                      e.what(), operation);
+        return ExtremaResult::failure(CasErrc::InternalInvariant, e.what(), operation);
     }
 }
 
@@ -263,8 +279,10 @@ ExtremaResult find_extrema_checked(
     return find_extrema_checked(f, vars, context);
 }
 
-std::vector<CriticalPoint> find_extrema(
-    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars)
+static std::vector<CriticalPoint> find_extrema_impl(
+    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget)
 {
     if (!f || vars.empty()) {
         return {};
@@ -276,9 +294,9 @@ std::vector<CriticalPoint> find_extrema(
     std::vector<std::shared_ptr<SymbolicExpr>> grad_eqs;
     grad_eqs.reserve(n);
     for (const auto& var : vars) {
-        auto partial = f->differentiate(var);
+        auto partial = detail::make_expression_ptr(detail::differentiate_node(detail::node(f), var, transform_budget));
         if (partial) {
-            partial = partial->simplify();
+            partial = detail::make_expression_ptr(detail::normalize_node(detail::node(partial), transform_budget));
         }
         grad_eqs.push_back(partial);
     }
@@ -293,7 +311,12 @@ std::vector<CriticalPoint> find_extrema(
     }
     if (poly_eqs.size() == n) {
         auto checked_solutions =
-            Solver::solve_polynomial_system_checked(poly_eqs, vars);
+            Solver::solve_polynomial_system_checked(poly_eqs, vars, context);
+        if (!checked_solutions &&
+            checked_solutions.error().code != CasErrc::Inconclusive &&
+            checked_solutions.error().code != CasErrc::UnsupportedExpression) {
+            throw checked_solutions.error();
+        }
         const auto poly_solutions = checked_solutions
             ? std::move(checked_solutions.value())
             : std::vector<std::map<std::string, SymbolicExpr>>{};
@@ -308,7 +331,14 @@ std::vector<CriticalPoint> find_extrema(
 
     /// 如果多项式求解器失败,尝试线性求解器
     if (solutions.empty()) {
-        solutions = SymbolicExpr::solve_system(grad_eqs, vars);
+        auto solved = solver_detail::solve_linear_system_impl(poly_eqs, vars, context);
+        if (!solved.empty()) {
+            std::map<std::string, std::shared_ptr<SymbolicExpr>> point;
+            for (auto& [variable, value] : solved) {
+                point.emplace(variable, detail::make_expression_ptr(std::move(value)));
+            }
+            solutions.push_back(std::move(point));
+        }
     }
 
     if (solutions.empty()) {
@@ -316,7 +346,7 @@ std::vector<CriticalPoint> find_extrema(
     }
 
     /// 计算海森矩阵
-    auto H = hessian(f, vars);
+    auto H = hessian_impl(f, vars, transform_budget);
 
     /// 对每个临界点进行分类
     std::vector<CriticalPoint> result;
@@ -328,8 +358,8 @@ std::vector<CriticalPoint> find_extrema(
 
         /// 在临界点处求值海森矩阵
         std::vector<double> numeric_H;
-        if (vector_calculus_evaluate_hessian_at_point(H, vars, sol, n, numeric_H)) {
-            cp.classification = vector_calculus_classify_critical_point(numeric_H, n);
+        if (vector_calculus_evaluate_hessian_at_point(H, vars, sol, n, numeric_H, context, transform_budget)) {
+            cp.classification = vector_calculus_classify_critical_point(numeric_H, n, context, transform_budget);
         } else {
             cp.classification = CriticalPointClassification::Inconclusive;
         }
@@ -338,6 +368,14 @@ std::vector<CriticalPoint> find_extrema(
     }
 
     return result;
+}
+
+std::vector<CriticalPoint> find_extrema(
+    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                          context.limits().max_ast_nodes, "find_extrema");
+    return find_extrema_impl(f, vars, context, transform_budget);
 }
 
 }

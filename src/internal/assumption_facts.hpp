@@ -2,12 +2,14 @@
 
 #include "internal/facts_query.hpp"
 #include "inference_engine.hpp"
+#include <set>
 
 namespace LMCAS {
 
 class AssumptionContext;
 
 namespace detail {
+class RewriteBudget;
 class AssumptionFacts final : public FactsQuery {
 public:
     explicit AssumptionFacts(const AssumptionContext& assumptions)
@@ -15,6 +17,8 @@ public:
     explicit AssumptionFacts(const InferenceEngine& engine) noexcept : engine_(&engine) {}
     AssumptionFacts(const AssumptionFacts&) = delete;
     AssumptionFacts& operator=(const AssumptionFacts&) = delete;
+    static void collect_names(const AssumptionContext& assumptions,
+        std::set<std::string>& names, RewriteBudget& budget);
 
     Result<Tribool> is_positive(const std::shared_ptr<const SymbolicNode>& node, ComputationContext& context) const override;
     Result<Tribool> is_negative(const std::shared_ptr<const SymbolicNode>& node, ComputationContext& context) const override;

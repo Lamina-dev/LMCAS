@@ -61,7 +61,7 @@ bool rd_factor_piece(const Polynomial<Rational>& piece, int mult,
 }
 }
 
-bool RationalDecompositionStrategy::factor_denominator(
+bool detail::factor_denominator(
     const Polynomial<Rational>& Q,
     std::vector<std::pair<Polynomial<Rational>, int>>& factors_out) {
     factors_out.clear();

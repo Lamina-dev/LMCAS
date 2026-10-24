@@ -7,6 +7,8 @@
 #include "root_of_utils.hpp"
 #include "internal/exact_algebraic.hpp"
 #include "internal/inequality_solver_support.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/rewrite_budget.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -19,6 +21,15 @@ namespace LMCAS {
 namespace {
 
 constexpr const char* kCheckedInequalityOperation = "solve_inequality_checked";
+
+void check_interval_forest(const std::vector<Interval>& intervals,
+                           detail::RewriteBudget& budget) {
+    std::size_t nodes = 0;
+    for (const auto& interval : intervals) {
+        nodes = budget.append_size(nodes, budget.measure(detail::node(interval.lower.value)));
+        nodes = budget.append_size(nodes, budget.measure(detail::node(interval.upper.value)));
+    }
+}
 
 bool rational_is_negative(const Rational& value) {
     return value.get_numerator().is_negative();
@@ -84,7 +95,8 @@ Result<void> verify_quadratic_boundary(
 static Result<std::vector<Interval>> double_root_inequality_intervals(
     const Polynomial<Rational>& polynomial, const Rational& rational_part,
     bool wants_positive, bool leading_positive, bool strict,
-    ComputationContext& context) {
+    detail::RewriteBudget& budget) {
+    auto& context = budget.context();
     auto root = SymbolicExpr::number(rational_part);
     auto verified = verify_quadratic_boundary(
         polynomial, root, rational_part, Rational(0), Rational(0), context);
@@ -100,12 +112,15 @@ static Result<std::vector<Interval>> double_root_inequality_intervals(
             Interval{Endpoint::neg_inf(), Endpoint::open(root)},
             Interval{Endpoint::open(root), Endpoint::pos_inf()}
         };
+        check_interval_forest(rays, budget);
         return Result<std::vector<Interval>>::success(std::move(rays));
     }
     if (strict) {
         return Result<std::vector<Interval>>::success({});
     }
-    return Result<std::vector<Interval>>::success({Interval::point(root)});
+    std::vector<Interval> point{Interval::point(root)};
+    check_interval_forest(point, budget);
+    return Result<std::vector<Interval>>::success(std::move(point));
 }
 
 struct QuadraticBoundaries {
@@ -116,19 +131,22 @@ struct QuadraticBoundaries {
 static Result<QuadraticBoundaries> verified_quadratic_boundaries(
     const Polynomial<Rational>& polynomial, const Rational& rational_part,
     const Rational& denominator, const Rational& discriminant,
-    ComputationContext& context) {
-    auto sqrt_discriminant = SymbolicExpr::sqrt(
-        SymbolicExpr::number(discriminant))->simplify();
+    detail::RewriteBudget& budget) {
+    auto& context = budget.context();
+    auto sqrt_discriminant = detail::make_expression_ptr(detail::normalize_node(detail::node(
+        SymbolicExpr::sqrt(SymbolicExpr::number(discriminant))), budget));
     const Rational first_radical_coefficient = Rational(-1) / denominator;
     const Rational second_radical_coefficient = Rational(1) / denominator;
-    auto first_formula = SymbolicExpr::add(
-        SymbolicExpr::number(rational_part),
-        SymbolicExpr::multiply(SymbolicExpr::number(first_radical_coefficient),
-                               sqrt_discriminant))->simplify();
-    auto second_formula = SymbolicExpr::add(
-        SymbolicExpr::number(rational_part),
-        SymbolicExpr::multiply(SymbolicExpr::number(second_radical_coefficient),
-                               sqrt_discriminant))->simplify();
+    auto first_formula = detail::make_expression_ptr(detail::normalize_node(detail::node(
+        SymbolicExpr::add(SymbolicExpr::number(rational_part),
+            SymbolicExpr::multiply(SymbolicExpr::number(first_radical_coefficient),
+                                   sqrt_discriminant))), budget));
+    auto second_formula = detail::make_expression_ptr(detail::normalize_node(detail::node(
+        SymbolicExpr::add(SymbolicExpr::number(rational_part),
+            SymbolicExpr::multiply(SymbolicExpr::number(second_radical_coefficient),
+                                   sqrt_discriminant))), budget));
+    budget.append_size(budget.measure(detail::node(first_formula)),
+                       budget.measure(detail::node(second_formula)));
     auto first_verified = verify_quadratic_boundary(
         polynomial, first_formula, rational_part,
         first_radical_coefficient, discriminant, context);
@@ -149,6 +167,8 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
     const Polynomial<Rational>& polynomial,
     InequalityType type,
     ComputationContext& context) {
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, kCheckedInequalityOperation);
     const Rational& constant = polynomial.coeffs[0];
     const Rational& linear = polynomial.coeffs[1];
     const Rational& quadratic = polynomial.coeffs[2];
@@ -181,7 +201,7 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
     const Rational rational_part = neg_linear / denominator;
     if (discriminant == Rational(0)) {
         auto intervals = double_root_inequality_intervals(polynomial, rational_part,
-            wants_positive, leading_positive, strict, context);
+            wants_positive, leading_positive, strict, budget);
         if (!intervals) {
             return Result<IntervalUnion>::failure(intervals.error());
         }
@@ -189,12 +209,8 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
             IntervalUnion::from_checked_normalized(std::move(intervals.value())));
     }
 
-    auto nodes = context.reserve_nodes(20, kCheckedInequalityOperation);
-    if (!nodes) {
-        return Result<IntervalUnion>::failure(nodes.error());
-    }
     auto boundaries = verified_quadratic_boundaries(
-        polynomial, rational_part, denominator, discriminant, context);
+        polynomial, rational_part, denominator, discriminant, budget);
     if (!boundaries) {
         return Result<IntervalUnion>::failure(boundaries.error());
     }
@@ -207,12 +223,16 @@ Result<IntervalUnion> InequalitySolver::solve_exact_quadratic_inequality(
             Interval{Endpoint::neg_inf(), finite_endpoint(lower, strict)},
             Interval{finite_endpoint(upper, strict), Endpoint::pos_inf()}
         };
+        check_interval_forest(rays, budget);
         return Result<IntervalUnion>::success(
             IntervalUnion::from_checked_normalized(std::move(rays)));
     }
-    return Result<IntervalUnion>::success(IntervalUnion::from_checked_normalized({
+    std::vector<Interval> interval{
         Interval{finite_endpoint(lower, strict), finite_endpoint(upper, strict)}
-    }));
+    };
+    check_interval_forest(interval, budget);
+    return Result<IntervalUnion>::success(
+        IntervalUnion::from_checked_normalized(std::move(interval)));
 }
 namespace {
 
@@ -253,7 +273,7 @@ Result<IntervalUnion> solve_exact_affine_inequality_impl(
 
     const Rational boundary = (Rational(0) - intercept) / slope;
     auto boundary_expr = SymbolicExpr::number(boundary);
-    auto nodes = context.reserve_nodes(1, kCheckedInequalityOperation);
+    auto nodes = context.require_ast_nodes(1, kCheckedInequalityOperation);
     if (!nodes) {
         return Result<IntervalUnion>::failure(nodes.error());
     }
@@ -269,6 +289,9 @@ Result<IntervalUnion> solve_exact_affine_inequality_impl(
     const Interval interval = solution_above
         ? Interval{finite, Endpoint::pos_inf()}
         : Interval{Endpoint::neg_inf(), finite};
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, kCheckedInequalityOperation);
+    check_interval_forest({interval}, budget);
     return Result<IntervalUnion>::success(IntervalUnion::from_single(interval));
 }
 
@@ -280,7 +303,7 @@ struct ExactInequalityRoot {
 };
 
 std::shared_ptr<SymbolicExpr> rational_polynomial_expression(
-    const Polynomial<Rational>& polynomial) {
+    const Polynomial<Rational>& polynomial, detail::RewriteBudget& budget) {
     auto variable = SymbolicExpr::variable(polynomial.variable_name);
     std::shared_ptr<SymbolicExpr> sum = SymbolicExpr::number(0);
     for (int degree = 0; degree <= polynomial.degree(); ++degree) {
@@ -295,19 +318,22 @@ std::shared_ptr<SymbolicExpr> rational_polynomial_expression(
             term = SymbolicExpr::multiply(term, power);
         }
         sum = SymbolicExpr::add(sum, term);
+        budget.measure(detail::node(sum));
     }
-    return sum->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(sum), budget));
 }
 
 Result<void> append_exact_factor_roots(
     std::vector<ExactInequalityRoot>& roots, const Polynomial<Rational>& factor,
-    int multiplicity, const std::string& variable, ComputationContext& context) {
+    int multiplicity, const std::string& variable, detail::RewriteBudget& budget,
+    std::size_t& root_nodes) {
+    auto& context = budget.context();
     auto isolated = isolate_real_roots_checked(factor, context);
     if (!isolated) {
         return Result<void>::failure(isolated.error());
     }
     const auto& intervals = isolated.value();
-    auto factor_expression = rational_polynomial_expression(factor);
+    auto factor_expression = rational_polynomial_expression(factor, budget);
     for (std::size_t index = 0; index < intervals.size(); ++index) {
         auto algebraic = LMCAS::detail::make_exact_real_algebraic(
             factor, index, static_cast<std::size_t>(multiplicity), context);
@@ -320,6 +346,7 @@ Result<void> append_exact_factor_roots(
                 static_cast<int>(index)),
             std::move(algebraic.value()),
             multiplicity});
+        root_nodes = budget.append_size(root_nodes, budget.measure(detail::node(roots.back().expression)));
     }
     return Result<void>::success();
 }
@@ -392,12 +419,15 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
     auto factors = square_free_factorization(polynomial);
     std::vector<ExactInequalityRoot> roots;
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, kCheckedInequalityOperation);
+        std::size_t root_nodes = 0;
         for (const auto& [factor, multiplicity] : factors) {
             if (factor.degree() < 1) {
                 continue;
             }
             auto appended = append_exact_factor_roots(
-                roots, factor, multiplicity, polynomial.variable_name, context);
+                roots, factor, multiplicity, polynomial.variable_name, budget, root_nodes);
             if (!appended) {
                 return Result<IntervalUnion>::failure(appended.error());
             }
@@ -406,6 +436,14 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
         if (!sorted) {
             return Result<IntervalUnion>::failure(sorted.error());
         }
+        auto intervals = exact_polynomial_sign_intervals(polynomial, roots, type);
+        check_interval_forest(intervals, budget);
+        return IntervalUnion::from_intervals_checked(std::move(intervals), context);
+    } catch (const CasError& error) {
+        return Result<IntervalUnion>::failure(error);
+    } catch (const std::length_error& error) {
+        return Result<IntervalUnion>::failure(
+            CasErrc::ResourceLimit, error.what(), kCheckedInequalityOperation);
     } catch (const std::bad_alloc&) {
         return Result<IntervalUnion>::failure(
             CasErrc::ResourceLimit,
@@ -417,8 +455,6 @@ Result<IntervalUnion> solve_exact_polynomial_inequality_impl(
             kCheckedInequalityOperation);
     }
 
-    return IntervalUnion::from_intervals_checked(
-        exact_polynomial_sign_intervals(polynomial, roots, type), context);
 }
 }
 

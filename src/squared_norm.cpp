@@ -19,9 +19,8 @@ const SymbolicNode* square_root_argument(const SymbolicNode& root) {
         return nullptr;
     }
     const auto& value = exponent->value();
-    const bool half = std::holds_alternative<Rational>(value)
-        ? std::get<Rational>(value) == Rational(1, 2)
-        : std::holds_alternative<lmmc_real_t>(value) && std::get<lmmc_real_t>(value) == 0.5;
+    const bool half = std::holds_alternative<Rational>(value) &&
+        std::get<Rational>(value) == Rational(1, 2);
     return half ? power->base().get() : nullptr;
 }
 
@@ -37,9 +36,7 @@ const PowerNode* squared_term(const SymbolicNode* node) {
     const auto& value = exponent->value();
     const bool two = std::holds_alternative<BigInt>(value)
         ? std::get<BigInt>(value) == BigInt(2)
-        : std::holds_alternative<Rational>(value)
-            ? std::get<Rational>(value) == Rational(2)
-            : std::get<lmmc_real_t>(value) == 2.0;
+        : std::get<Rational>(value) == Rational(2);
     return two ? power : nullptr;
 }
 

@@ -130,15 +130,11 @@ Result<T> quadrature_failure(lmmc_status_t status, const std::string& operation)
         quadrature_error_code(status), lmmc_status_string(status), operation);
 }
 
-ApproxReal zero_quadrature_result() {
-    ApproxReal result;
-    result.value = 0.0;
-    result.absolute_error = 0.0;
-    result.status = NumericStatus::Finite;
-    return result;
+QuadratureEstimate zero_quadrature_result() {
+    return {};
 }
 
-Result<ApproxReal> estimated_quadrature_result(
+Result<QuadratureEstimate> estimated_quadrature_result(
     double value,
     double estimated_error,
     double sign,
@@ -146,21 +142,20 @@ Result<ApproxReal> estimated_quadrature_result(
     value *= sign;
     estimated_error = std::abs(estimated_error);
     if (!std::isfinite(value) || !std::isfinite(estimated_error)) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::NumericFailure,
             "quadrature accumulation or error estimate is non-finite",
             operation);
     }
-    ApproxReal result;
+    QuadratureEstimate result;
     result.value = value;
-    result.absolute_error = estimated_error;
-    result.status = NumericStatus::Finite;
-    return Result<ApproxReal>::success(result);
+    result.estimated_error = estimated_error;
+    return Result<QuadratureEstimate>::success(result);
 }
 
 }
 
-Result<ApproxReal> quadrature_simpson_numeric(
+Result<QuadratureEstimate> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -170,23 +165,23 @@ Result<ApproxReal> quadrature_simpson_numeric(
     constexpr const char* operation = "quadrature_simpson";
     auto valid = validate_quadrature_args(
         function, variable, lower, upper, operation);
-    if (!valid) return Result<ApproxReal>::failure(valid.error());
+    if (!valid) return Result<QuadratureEstimate>::failure(valid.error());
     if (subdivisions <= 0 || subdivisions % 2 != 0) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::InvalidArgument,
             "Simpson subinterval count must be positive and even",
             operation);
     }
     if (subdivisions > std::numeric_limits<int>::max() / 2) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::ResourceLimit,
             "Simpson refinement count overflows",
             operation);
     }
     auto interval = evaluate_interval(lower, upper, context, operation);
-    if (!interval) return Result<ApproxReal>::failure(interval.error());
+    if (!interval) return Result<QuadratureEstimate>::failure(interval.error());
     if (interval.value().lower == interval.value().upper) {
-        return Result<ApproxReal>::success(zero_quadrature_result());
+        return Result<QuadratureEstimate>::success(zero_quadrature_result());
     }
     const auto refined_subdivisions =
         static_cast<std::size_t>(subdivisions) * 2;
@@ -194,7 +189,7 @@ Result<ApproxReal> quadrature_simpson_numeric(
         static_cast<std::size_t>(subdivisions) + 1 +
         refined_subdivisions + 1;
     auto budget = context.consume_steps(samples, operation);
-    if (!budget) return Result<ApproxReal>::failure(budget.error());
+    if (!budget) return Result<QuadratureEstimate>::failure(budget.error());
 
     detail::ensure_lmmc_lifecycle();
     QuadratureCallback callback{
@@ -204,9 +199,9 @@ Result<ApproxReal> quadrature_simpson_numeric(
         evaluate_quadrature_callback, &callback,
         interval.value().lower, interval.value().upper,
         static_cast<std::size_t>(subdivisions), &value);
-    if (callback.error) return Result<ApproxReal>::failure(*callback.error);
+    if (callback.error) return Result<QuadratureEstimate>::failure(*callback.error);
     if (status != LMMC_STATUS_OK) {
-        return quadrature_failure<ApproxReal>(status, operation);
+        return quadrature_failure<QuadratureEstimate>(status, operation);
     }
 
     double refined_value = 0.0;
@@ -214,9 +209,9 @@ Result<ApproxReal> quadrature_simpson_numeric(
         evaluate_quadrature_callback, &callback,
         interval.value().lower, interval.value().upper,
         refined_subdivisions, &refined_value);
-    if (callback.error) return Result<ApproxReal>::failure(*callback.error);
+    if (callback.error) return Result<QuadratureEstimate>::failure(*callback.error);
     if (status != LMMC_STATUS_OK) {
-        return quadrature_failure<ApproxReal>(status, operation);
+        return quadrature_failure<QuadratureEstimate>(status, operation);
     }
     const double correction = (refined_value - value) / 15.0;
     const double extrapolated_value = refined_value + correction;
@@ -225,7 +220,7 @@ Result<ApproxReal> quadrature_simpson_numeric(
         interval.value().sign, operation);
 }
 
-Result<ApproxReal> quadrature_simpson_numeric(
+Result<QuadratureEstimate> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -236,7 +231,7 @@ Result<ApproxReal> quadrature_simpson_numeric(
         function, variable, lower, upper, context, subdivisions);
 }
 
-Result<ApproxReal> quadrature_gaussian_numeric(
+Result<QuadratureEstimate> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -246,22 +241,22 @@ Result<ApproxReal> quadrature_gaussian_numeric(
     constexpr const char* operation = "quadrature_gaussian";
     auto valid = validate_quadrature_args(
         function, variable, lower, upper, operation);
-    if (!valid) return Result<ApproxReal>::failure(valid.error());
+    if (!valid) return Result<QuadratureEstimate>::failure(valid.error());
     if (order < 1 || order > 20) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::InvalidArgument,
             "Gaussian quadrature order must be in [1, 20]",
             operation);
     }
     auto interval = evaluate_interval(lower, upper, context, operation);
-    if (!interval) return Result<ApproxReal>::failure(interval.error());
+    if (!interval) return Result<QuadratureEstimate>::failure(interval.error());
     if (interval.value().lower == interval.value().upper) {
-        return Result<ApproxReal>::success(zero_quadrature_result());
+        return Result<QuadratureEstimate>::success(zero_quadrature_result());
     }
     const int comparison_order = order == 20 ? 19 : order + 1;
     auto budget = context.consume_steps(
         static_cast<std::size_t>(order + comparison_order + 2), operation);
-    if (!budget) return Result<ApproxReal>::failure(budget.error());
+    if (!budget) return Result<QuadratureEstimate>::failure(budget.error());
 
     detail::ensure_lmmc_lifecycle();
     QuadratureCallback callback{
@@ -271,9 +266,9 @@ Result<ApproxReal> quadrature_gaussian_numeric(
         evaluate_quadrature_callback, &callback,
         interval.value().lower, interval.value().upper,
         static_cast<std::size_t>(order), &value);
-    if (callback.error) return Result<ApproxReal>::failure(*callback.error);
+    if (callback.error) return Result<QuadratureEstimate>::failure(*callback.error);
     if (status != LMMC_STATUS_OK) {
-        return quadrature_failure<ApproxReal>(status, operation);
+        return quadrature_failure<QuadratureEstimate>(status, operation);
     }
 
     double comparison_value = 0.0;
@@ -281,16 +276,16 @@ Result<ApproxReal> quadrature_gaussian_numeric(
         evaluate_quadrature_callback, &callback,
         interval.value().lower, interval.value().upper,
         static_cast<std::size_t>(comparison_order), &comparison_value);
-    if (callback.error) return Result<ApproxReal>::failure(*callback.error);
+    if (callback.error) return Result<QuadratureEstimate>::failure(*callback.error);
     if (status != LMMC_STATUS_OK) {
-        return quadrature_failure<ApproxReal>(status, operation);
+        return quadrature_failure<QuadratureEstimate>(status, operation);
     }
     return estimated_quadrature_result(
         value, std::abs(comparison_value - value),
         interval.value().sign, operation);
 }
 
-Result<ApproxReal> quadrature_gaussian_numeric(
+Result<QuadratureEstimate> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -301,7 +296,7 @@ Result<ApproxReal> quadrature_gaussian_numeric(
         function, variable, lower, upper, context, order);
 }
 
-Result<ApproxReal> adaptive_simpson_numeric(
+Result<QuadratureEstimate> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -312,26 +307,26 @@ Result<ApproxReal> adaptive_simpson_numeric(
     constexpr const char* operation = "adaptive_simpson";
     auto valid = validate_quadrature_args(
         function, variable, lower, upper, operation);
-    if (!valid) return Result<ApproxReal>::failure(valid.error());
+    if (!valid) return Result<QuadratureEstimate>::failure(valid.error());
     if (!(tolerance > 0.0) || !std::isfinite(tolerance)) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::InvalidArgument,
             "tolerance must be finite and positive",
             operation);
     }
     if (max_depth < 0) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::InvalidArgument,
             "maximum recursion depth must be non-negative",
             operation);
     }
     auto interval = evaluate_interval(lower, upper, context, operation);
-    if (!interval) return Result<ApproxReal>::failure(interval.error());
+    if (!interval) return Result<QuadratureEstimate>::failure(interval.error());
     if (interval.value().lower == interval.value().upper) {
-        return Result<ApproxReal>::success(zero_quadrature_result());
+        return Result<QuadratureEstimate>::success(zero_quadrature_result());
     }
     auto recursion = context.enter_recursion(operation);
-    if (!recursion) return Result<ApproxReal>::failure(recursion.error());
+    if (!recursion) return Result<QuadratureEstimate>::failure(recursion.error());
     struct RecursionGuard {
         ComputationContext& context;
         ~RecursionGuard() { context.leave_recursion(); }
@@ -351,32 +346,31 @@ Result<ApproxReal> adaptive_simpson_numeric(
         evaluate_quadrature_callback, &callback,
         interval.value().lower, interval.value().upper,
         tolerance, 0.0, effective_depth, &backend_result);
-    if (callback.error) return Result<ApproxReal>::failure(*callback.error);
+    if (callback.error) return Result<QuadratureEstimate>::failure(*callback.error);
     if (status == LMMC_STATUS_WARNING_MAX_DEPTH) {
-        return Result<ApproxReal>::failure(
+        return Result<QuadratureEstimate>::failure(
             CasErrc::ResourceLimit,
             "adaptive Simpson recursion limit reached before meeting tolerance",
             operation);
     }
     if (status != LMMC_STATUS_OK) {
-        return quadrature_failure<ApproxReal>(status, operation);
+        return quadrature_failure<QuadratureEstimate>(status, operation);
     }
-    ApproxReal result;
+    QuadratureEstimate result;
     result.value = interval.value().sign * backend_result.value;
-    result.absolute_error = std::abs(backend_result.error) +
+    result.estimated_error = std::abs(backend_result.error) +
         std::numeric_limits<double>::epsilon() *
             std::max(1.0, std::abs(result.value)) * 16.0;
-    result.status = NumericStatus::Finite;
-    if (!std::isfinite(result.value) || !std::isfinite(result.absolute_error)) {
-        return Result<ApproxReal>::failure(
+    if (!std::isfinite(result.value) || !std::isfinite(result.estimated_error)) {
+        return Result<QuadratureEstimate>::failure(
             CasErrc::NumericFailure,
             "adaptive Simpson result is not finite",
             operation);
     }
-    return Result<ApproxReal>::success(result);
+    return Result<QuadratureEstimate>::success(result);
 }
 
-Result<ApproxReal> adaptive_simpson_numeric(
+Result<QuadratureEstimate> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& function,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
@@ -386,28 +380,6 @@ Result<ApproxReal> adaptive_simpson_numeric(
     ComputationContext context;
     return adaptive_simpson_numeric(
         function, variable, lower, upper, context, tolerance, max_depth);
-}
-
-Result<ApproxReal> numerical_integrate_numeric(
-    const std::shared_ptr<SymbolicExpr>& function,
-    const std::string& variable,
-    const std::shared_ptr<SymbolicExpr>& lower,
-    const std::shared_ptr<SymbolicExpr>& upper,
-    ComputationContext& context,
-    int subdivisions) {
-    return quadrature_simpson_numeric(
-        function, variable, lower, upper, context, subdivisions);
-}
-
-Result<ApproxReal> numerical_integrate_numeric(
-    const std::shared_ptr<SymbolicExpr>& function,
-    const std::string& variable,
-    const std::shared_ptr<SymbolicExpr>& lower,
-    const std::shared_ptr<SymbolicExpr>& upper,
-    int subdivisions) {
-    ComputationContext context;
-    return numerical_integrate_numeric(
-        function, variable, lower, upper, context, subdivisions);
 }
 
 }

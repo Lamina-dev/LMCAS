@@ -1,8 +1,9 @@
+#include "internal/expression_transform.hpp"
 #include "internal/integration_table_rules.hpp"
 
 namespace LMCAS::integration_table_detail {
 
-void load_algebraic_elementary_rules(IntegrationTable& table) {
+void load_algebraic_elementary_rules(std::vector<detail::IntegrationEntry>& table) {
     {
         auto u = wildcard("_u");
         auto u_sq = SymbolicExpr::power(detail::make_expression_ptr(u), SymbolicExpr::number(2));
@@ -10,8 +11,7 @@ void load_algebraic_elementary_rules(IntegrationTable& table) {
         auto one_minus_u_sq = SymbolicExpr::add(SymbolicExpr::number(1), neg_u_sq);
         auto pat = *SymbolicExpr::power(SymbolicExpr::sqrt(one_minus_u_sq), SymbolicExpr::number(-1));
         auto res = *make_unary_function(FT::ArcSin, detail::make_expression_ptr(u));
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/sqrt(1-x^2)", pat, res, {"_u"}, u_is_var("_u"), 40));
+        table.push_back(detail::IntegrationEntry("1/sqrt(1-x^2)", pat, res, {"_u"}, u_is_var("_u"), 40));
     }
     {
         auto u = wildcard("_u");
@@ -19,8 +19,10 @@ void load_algebraic_elementary_rules(IntegrationTable& table) {
         auto res = *SymbolicExpr::multiply(
             SymbolicExpr::number(Rational(1, 2)),
             SymbolicExpr::multiply(detail::make_expression_ptr(u), make_unary_function(FT::Abs, detail::make_expression_ptr(u))));
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "|x|", pat, res, {"_u"}, u_is_var("_u"), 40));
+        table.push_back(detail::IntegrationEntry("|x|", pat, res, {"_u"}, u_is_real_var("_u"), 40));
+        auto square = SymbolicExpr::power(detail::make_expression_ptr(u), SymbolicExpr::number(2));
+        auto root = *SymbolicExpr::sqrt(square);
+        table.push_back(detail::IntegrationEntry("sqrt(x^2)", root, res, {"_u"}, u_is_real_var("_u"), 40));
     }
     {
         auto u = wildcard("_u");
@@ -28,12 +30,11 @@ void load_algebraic_elementary_rules(IntegrationTable& table) {
         auto one_plus_u_sq = SymbolicExpr::add(SymbolicExpr::number(1), u_sq);
         auto pat = *SymbolicExpr::power(one_plus_u_sq, SymbolicExpr::number(-1));
         auto res = *make_unary_function(FT::ArcTan, detail::make_expression_ptr(u));
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/(1+x^2)", pat, res, {"_u"}, u_is_var("_u"), 40));
+        table.push_back(detail::IntegrationEntry("1/(1+x^2)", pat, res, {"_u"}, u_is_var("_u"), 40));
     }
 }
 
-void load_algebraic_radicals_rules(IntegrationTable& table) {
+void load_algebraic_radicals_rules(std::vector<detail::IntegrationEntry>& table) {
     {
         auto u = wildcard("_u");
         auto a = wildcard("_a");
@@ -46,10 +47,9 @@ void load_algebraic_radicals_rules(IntegrationTable& table) {
         auto a_sq_r = SymbolicExpr::power(detail::make_expression_ptr(a), SymbolicExpr::number(2));
         auto sum_r = SymbolicExpr::add(u_sq_r, a_sq_r);
         auto inner = SymbolicExpr::add(detail::make_expression_ptr(u), SymbolicExpr::sqrt(sum_r));
-        auto res = *SymbolicExpr::ln(inner);
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/sqrt(x^2+a^2)", pat, res, {"_u", "_a"},
-            u_is_var_a_indep("_u", "_a"), 50));
+        auto res = *SymbolicExpr::ln(make_unary_function(FT::Abs, inner));
+        table.push_back(detail::IntegrationEntry("1/sqrt(x^2+a^2)", pat, res, {"_u", "_a"},
+            u_is_var_a_nonzero("_u", "_a", true), 50));
     }
     {
         auto u = wildcard("_u");
@@ -65,14 +65,13 @@ void load_algebraic_radicals_rules(IntegrationTable& table) {
         auto neg_a_sq_r = SymbolicExpr::multiply(SymbolicExpr::number(-1), a_sq_r);
         auto diff_r = SymbolicExpr::add(u_sq_r, neg_a_sq_r);
         auto inner = SymbolicExpr::add(detail::make_expression_ptr(u), SymbolicExpr::sqrt(diff_r));
-        auto res = *SymbolicExpr::ln(inner);
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/sqrt(x^2-a^2)", pat, res, {"_u", "_a"},
-            u_is_var_a_indep("_u", "_a"), 50));
+        auto res = *SymbolicExpr::ln(make_unary_function(FT::Abs, inner));
+        table.push_back(detail::IntegrationEntry("1/sqrt(x^2-a^2)", pat, res, {"_u", "_a"},
+            u_is_var_a_nonzero("_u", "_a", true), 50));
     }
 }
 
-void load_algebraic_reciprocals_rules(IntegrationTable& table) {
+void load_algebraic_reciprocals_rules(std::vector<detail::IntegrationEntry>& table) {
     {
         auto u = wildcard("_u");
         auto a = wildcard("_a");
@@ -84,9 +83,8 @@ void load_algebraic_reciprocals_rules(IntegrationTable& table) {
         auto inv_a = SymbolicExpr::power(detail::make_expression_ptr(a), SymbolicExpr::number(-1));
         auto u_over_a = SymbolicExpr::multiply(detail::make_expression_ptr(u), SymbolicExpr::power(detail::make_expression_ptr(a), SymbolicExpr::number(-1)));
         auto res = *SymbolicExpr::multiply(inv_a, make_unary_function(FT::ArcTan, u_over_a));
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/(x^2+a^2)", pat, res, {"_u", "_a"},
-            u_is_var_a_indep("_u", "_a"), 50));
+        table.push_back(detail::IntegrationEntry("1/(x^2+a^2)", pat, res, {"_u", "_a"},
+            u_is_var_a_nonzero("_u", "_a"), 50));
     }
     {
         auto u = wildcard("_u");
@@ -103,20 +101,18 @@ void load_algebraic_reciprocals_rules(IntegrationTable& table) {
         auto u_minus_a = SymbolicExpr::add(detail::make_expression_ptr(u), neg_a);
         auto u_plus_a = SymbolicExpr::add(detail::make_expression_ptr(u), detail::make_expression_ptr(a));
         auto frac = SymbolicExpr::divide(u_minus_a, u_plus_a);
-        auto res = *SymbolicExpr::multiply(inv_2a, SymbolicExpr::ln(frac));
-        table.add_entry(Category::Algebraic, IntegrationEntry(
-            "1/(x^2-a^2)", pat, res, {"_u", "_a"},
-            u_is_var_a_indep("_u", "_a"), 50));
+        auto res = *SymbolicExpr::multiply(inv_2a, SymbolicExpr::ln(make_unary_function(FT::Abs, frac)));
+        table.push_back(detail::IntegrationEntry("1/(x^2-a^2)", pat, res, {"_u", "_a"},
+            u_is_var_a_nonzero("_u", "_a", true), 50));
     }
 }
 
-void load_polynomial_rules(IntegrationTable& table) {
+void load_polynomial_rules(std::vector<detail::IntegrationEntry>& table) {
     {
         auto u = wildcard("_u");
         auto pat = *SymbolicExpr::power(detail::make_expression_ptr(u), SymbolicExpr::number(-1));
         auto res = *SymbolicExpr::ln(detail::make_expression_ptr(u));
-        table.add_entry(Category::Polynomial, IntegrationEntry(
-            "1/x", pat, res, {"_u"}, u_is_var("_u"), 50));
+        table.push_back(detail::IntegrationEntry("1/x", pat, res, {"_u"}, u_is_var("_u"), 50));
     }
     {
         auto u = wildcard("_u");
@@ -126,23 +122,27 @@ void load_polynomial_rules(IntegrationTable& table) {
         auto res = *SymbolicExpr::divide(
             SymbolicExpr::power(detail::make_expression_ptr(u), n_plus_1),
             n_plus_1);
-        table.add_entry(Category::Polynomial, IntegrationEntry(
-            "x^n", pat, res, {"_u", "_n"},
-            [](const MatchMap& m, const std::string& var) {
-                auto it_u = m.find("_u");
-                if (it_u == m.end()) { return false; }
-                auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
-                if (!v || v->is_constant() || v->name() != var) { return false; }
-                auto it_n = m.find("_n");
-                if (it_n == m.end()) { return false; }
-                if (expression_depends_on_variable(LMCAS::detail::node(it_n->second), var)) { return false; }
-                auto n_simp = it_n->second.simplify();
-                if (!n_simp) { return false; }
-                auto neg_one = SymbolicExpr::number(-1);
-                auto diff = SymbolicExpr::add(n_simp, neg_one)->simplify();
-                if (diff && diff->is_zero()) { return false; }
-                return true;
-            }, 80));
+        table.push_back(detail::IntegrationEntry("x^n", pat, res, {"_u", "_n"},
+        [](const MatchMap& m, const std::string& var, ComputationContext& context) {
+            auto it_u = m.find("_u");
+            if (it_u == m.end()) { return false; }
+            auto v = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(it_u->second));
+            if (!v || v->is_constant() || v->name() != var) { return false; }
+            auto it_n = m.find("_n");
+            if (it_n == m.end()) { return false; }
+            if (expression_depends_on_variable(LMCAS::detail::node(it_n->second), var)) { return false; }
+            const auto exponent = detail::exact_rational_value(detail::node(it_n->second));
+            if (exponent) { return *exponent + Rational(1) != Rational(0); }
+            detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                context.limits().max_ast_nodes, "integrate.power");
+            auto next = detail::normalize_node(detail::node(SymbolicExpr::add(
+                detail::make_expression_ptr(it_n->second), SymbolicExpr::number(1))), budget);
+            std::optional<detail::AssumptionFacts> assumptions;
+            if (context.assumptions()) { assumptions.emplace(*context.assumptions()); }
+            return normalization_proved(detail::query_nonzero_value(next,
+                assumptions ? static_cast<const FactsQuery&>(*assumptions) : detail::no_facts(),
+                Domain::Real, context));
+        }, 80));
     }
     {
         auto u = wildcard("_u");
@@ -150,8 +150,7 @@ void load_polynomial_rules(IntegrationTable& table) {
         auto res = *SymbolicExpr::multiply(
             SymbolicExpr::power(detail::make_expression_ptr(u), SymbolicExpr::number(2)),
             sym_rational(1, 2));
-        table.add_entry(Category::Polynomial, IntegrationEntry(
-            "x", pat, res, {"_u"}, u_is_var("_u"), 90));
+        table.push_back(detail::IntegrationEntry("x", pat, res, {"_u"}, u_is_var("_u"), 90));
     }
 }
 

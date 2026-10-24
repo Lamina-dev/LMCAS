@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transcendental_factor.hpp"
 
@@ -416,7 +417,7 @@ TEST(TranscendentalFactorPipeline, UnsuitableFirstPrimeIsSkipped) {
         reconstructed = SymbolicExpr::multiply(reconstructed, factor);
     }
     EXPECT_TRUE(test_proved_equivalent(
-        reconstructed->expand(), expression->expand()));
+        LMCAS::expand(reconstructed).value(), LMCAS::expand(expression).value()));
 }
 
 TEST(TranscendentalFactorPipeline, ContextCancellationPropagates) {

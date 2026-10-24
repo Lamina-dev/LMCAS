@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/symbolic_matrix_support.hpp"
 
 #include "solve_strategies.hpp"
@@ -60,7 +62,9 @@ ExpressionResult matrix_characteristic_polynomial_checked(
 }
 
 MatrixEigenvalueResult matrix_eigenvalues_checked(
-    const std::shared_ptr<SymbolicExpr>& A, ComputationContext& context) {
+    const std::shared_ptr<SymbolicExpr>& A, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "matrix_eigenvalues";
     auto matrix_result = require_square_matrix(A, context, operation);
     if (!matrix_result) {
@@ -71,7 +75,7 @@ MatrixEigenvalueResult matrix_eigenvalues_checked(
     for (std::size_t row = 0; row < matrix.rows() && triangular; ++row) {
         for (std::size_t column = 0; column < row; ++column) {
             auto value =
-                detail::make_expression_ptr(matrix.get(row, column))->simplify();
+                detail::make_expression_ptr(detail::normalize_node(matrix.get(row, column), transform_budget));
             if (!detail::node(value)->is_zero()) {
                 triangular = false;
                 break;
@@ -83,8 +87,7 @@ MatrixEigenvalueResult matrix_eigenvalues_checked(
         values.reserve(matrix.rows());
         for (std::size_t index = 0; index < matrix.rows(); ++index) {
             values.push_back(
-                detail::make_expression_ptr(
-                    matrix.get(index, index))->simplify());
+                detail::make_expression_ptr(detail::normalize_node(matrix.get(index, index), transform_budget)));
         }
         return MatrixEigenvalueResult::success(std::move(values));
     }
@@ -109,6 +112,14 @@ MatrixEigenvalueResult matrix_eigenvalues_checked(
             "eigenvalue solver produced no finite roots", operation);
     }
     return MatrixEigenvalueResult::success(std::move(values));
+} catch (const CasError& error) {
+    return MatrixEigenvalueResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return MatrixEigenvalueResult::failure(CasErrc::ResourceLimit, "allocation failed", "matrix_eigenvalues");
+} catch (const std::length_error& error) {
+    return MatrixEigenvalueResult::failure(CasErrc::ResourceLimit, error.what(), "matrix_eigenvalues");
+} catch (const std::exception& error) {
+    return MatrixEigenvalueResult::failure(CasErrc::InternalInvariant, error.what(), "matrix_eigenvalues");
 }
 
 MatrixEigenvalueResult matrix_eigenvalues_checked(
@@ -122,7 +133,9 @@ using Eigenspaces = std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprP
 
 Result<bool> eigenvalue_already_collected(const ExprPtr& lambda,
     const Eigenspaces& spaces, ComputationContext& context,
-    const detail::AssumptionFacts& facts) {
+    const detail::AssumptionFacts& facts) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     constexpr const char* operation = "matrix_eigenspaces";
     for (const auto& space : spaces) {
         if (detail::node(lambda)->equals(*detail::node(space.first))) { return true; }
@@ -131,7 +144,7 @@ Result<bool> eigenvalue_already_collected(const ExprPtr& lambda,
         auto proof = detail::classify_exact_zero(difference, context, operation);
         if (!proof) { return Result<bool>::failure(proof.error()); }
         if (proof.value() == detail::ZeroProof::Zero) { return true; }
-        auto nonzero = detail::query_nonzero_value(detail::node(difference->simplify()), facts, Domain::Complex, context);
+        auto nonzero = detail::query_nonzero_value(detail::normalize_node(detail::node(difference), transform_budget), facts, Domain::Complex, context);
         if (!nonzero) { return Result<bool>::failure(nonzero.error()); }
         if (nonzero.value() != Tribool::True) {
             return Result<bool>::failure(CasErrc::Inconclusive,
@@ -139,10 +152,20 @@ Result<bool> eigenvalue_already_collected(const ExprPtr& lambda,
         }
     }
     return false;
+} catch (const CasError& error) {
+    return Result<bool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, "allocation failed", "matrix_eigenspaces");
+} catch (const std::length_error& error) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, error.what(), "matrix_eigenspaces");
+} catch (const std::exception& error) {
+    return Result<bool>::failure(CasErrc::InternalInvariant, error.what(), "matrix_eigenspaces");
 }
 
 MatrixEigenvectorResult eigenvalue_nullspace(const MatrixNode& matrix,
-    const ExprPtr& lambda, ComputationContext& context) {
+    const ExprPtr& lambda, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> shifted(
         matrix.rows(),
         std::vector<std::shared_ptr<SymbolicExpr>>(matrix.cols()));
@@ -150,8 +173,8 @@ MatrixEigenvectorResult eigenvalue_nullspace(const MatrixNode& matrix,
         for (std::size_t column = 0; column < matrix.cols(); ++column) {
             auto value = detail::make_expression_ptr(matrix.get(row, column));
             shifted[row][column] = row == column
-                ? SymbolicExpr::add(value, SymbolicExpr::multiply(
-                      SymbolicExpr::number(-1), lambda))->simplify()
+                ? detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(value, SymbolicExpr::multiply(
+                      SymbolicExpr::number(-1), lambda))), transform_budget))
                 : std::move(value);
         }
     }
@@ -162,11 +185,21 @@ MatrixEigenvectorResult eigenvalue_nullspace(const MatrixNode& matrix,
             "eigenvalue has no proved nonzero nullspace basis", "matrix_eigenspaces");
     }
     return nullspace;
+} catch (const CasError& error) {
+    return MatrixEigenvectorResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return MatrixEigenvectorResult::failure(CasErrc::ResourceLimit, "allocation failed", "eigenvalue_nullspace");
+} catch (const std::length_error& error) {
+    return MatrixEigenvectorResult::failure(CasErrc::ResourceLimit, error.what(), "eigenvalue_nullspace");
+} catch (const std::exception& error) {
+    return MatrixEigenvectorResult::failure(CasErrc::InternalInvariant, error.what(), "eigenvalue_nullspace");
 }
 }
 
 Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>
-detail::matrix_eigenspaces_checked(const ExprPtr& A, ComputationContext& context) {
+detail::matrix_eigenspaces_checked(const ExprPtr& A, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     using SpacesResult = Result<Eigenspaces>;
     constexpr const char* operation = "matrix_eigenspaces";
     auto matrix_result = require_square_matrix(A, context, operation);
@@ -179,7 +212,7 @@ detail::matrix_eigenspaces_checked(const ExprPtr& A, ComputationContext& context
     detail::AssumptionFacts facts(context.assumptions() ? *context.assumptions() : assumptions);
     try {
         for (const auto& eigenvalue : eigenvalues.value()) {
-            auto lambda = eigenvalue->simplify();
+            auto lambda = detail::make_expression_ptr(detail::normalize_node(detail::node(eigenvalue), transform_budget));
             auto duplicate = eigenvalue_already_collected(lambda, spaces, context, facts);
             if (!duplicate) { return SpacesResult::failure(duplicate.error()); }
             if (duplicate.value()) { continue; }
@@ -191,9 +224,17 @@ detail::matrix_eigenspaces_checked(const ExprPtr& A, ComputationContext& context
     } catch (const std::bad_alloc&) {
         return SpacesResult::failure(CasErrc::ResourceLimit,
             "allocation failed while computing eigenspaces", operation);
-    } catch (const std::exception& ex) {
+    } catch (const std::length_error& error) { return Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>::failure(CasErrc::ResourceLimit, error.what(), "matrix_eigenspaces"); } catch (const std::exception& ex) {
         return SpacesResult::failure(CasErrc::InternalInvariant, ex.what(), operation);
     }
+} catch (const CasError& error) {
+    return Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>::failure(CasErrc::ResourceLimit, "allocation failed", "matrix_eigenspaces");
+} catch (const std::length_error& error) {
+    return Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>::failure(CasErrc::ResourceLimit, error.what(), "matrix_eigenspaces");
+} catch (const std::exception& error) {
+    return Result<std::vector<std::pair<ExprPtr, std::vector<std::vector<ExprPtr>>>>>::failure(CasErrc::InternalInvariant, error.what(), "matrix_eigenspaces");
 }
 
 MatrixEigenvectorResult matrix_eigenvectors_checked(

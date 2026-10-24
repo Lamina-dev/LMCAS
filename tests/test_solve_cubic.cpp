@@ -102,19 +102,31 @@ TEST(SolveCubic, CubicTripleRootX13X33x23x10) {
     }
 }
 
-TEST(SolveCubic, CubicDiscriminantClassificationIsScaleRelative) {
+TEST(SolveCubic, CubicTinyExactConstantPreservesNonzeroRoot) {
     auto roots = LMCAS::solve_cubic(
         num(1),
         num(0),
         num(0),
         SymbolicExpr::number(-1e-200),
         "x");
-    EXPECT_TRUE((roots.size() == 3)) << "tiny nonzero constant still has three cubic roots";
-    if (roots.size() == 3) {
-        const double expected = std::cbrt(1e-200);
-        const double real_root = test_numeric_value(roots[0]);
-        EXPECT_TRUE((std::abs(real_root - expected) <= expected * 1e-12)) << "tiny nonzero constant must not be classified as a triple zero root";
+    ASSERT_EQ(roots.size(), 3u) << "tiny nonzero constant still has three cubic roots";
+    expect_rootof_roots(roots, Polynomial<Rational>(
+        {Rational("-1e-200"), Rational(0), Rational(0), Rational(1)}, "x"));
+    const double expected = std::cbrt(1e-200);
+    int real_roots = 0;
+    for (const auto& root : roots) {
+        expect_exact_cubic_residual(
+            root, num(1), num(0), num(0), SymbolicExpr::number(Rational("-1e-200")));
+        auto value = evaluate_numeric(*root);
+        if (!value) {
+            EXPECT_EQ(value.error().code, CasErrc::DomainError)
+                << value.error().message;
+            continue;
+        }
+        ++real_roots;
+        EXPECT_NEAR(value.value().value / expected, 1.0, 1e-12);
     }
+    EXPECT_EQ(real_roots, 1);
 }
 
 TEST(SolveCubic, CubicCommonCoefficientScaleDoesNotOverflowDepression) {
@@ -184,7 +196,7 @@ TEST(SolveCubic, CubicSymbolicCoefficientsX3AX2X10) {
 
         bool found_a = false;
         for (const auto &root : roots) {
-            if (root->compare(root->substitute("a", num(0))) != 0) {
+            if (root->compare(LMCAS::substitute(root, "a", num(0)).value()) != 0) {
                 found_a = true;
                 break;
             }

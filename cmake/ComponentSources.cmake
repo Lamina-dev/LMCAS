@@ -146,10 +146,8 @@ set(LMCAS_ALGEBRA_SOURCES
     src/solve_polynomial_normalization.cpp
     src/solve_polynomial_quadratic.cpp
     src/solve_polynomial_cubic.cpp
-    src/solve_polynomial_cubic_numeric.cpp
     src/solve_polynomial_quartic.cpp
     src/solve_polynomial_quartic_symbolic.cpp
-    src/solve_polynomial_resolvent.cpp
     src/solve_transcendental.cpp
     src/solve_mixed_transcendental.cpp
     src/solve_visitor.cpp
@@ -228,7 +226,6 @@ set(LMCAS_CALCULUS_SOURCES
     src/limit_visitor_squeeze.cpp
     src/integration_substitution.cpp
     src/integration_by_parts.cpp
-    src/integration_partial_fraction.cpp
     src/integration_rational_collection.cpp
     src/integration_rational_factorization.cpp
     src/integration_rational_coefficients.cpp
@@ -236,7 +233,6 @@ set(LMCAS_CALCULUS_SOURCES
     src/integration_table_elementary.cpp
     src/integration_table_algebraic.cpp
     src/integration_table_composite.cpp
-    src/integration_preprocess.cpp
     src/integration_linearity.cpp
     src/integration_definite.cpp
     src/integration_definite_algebraic.cpp

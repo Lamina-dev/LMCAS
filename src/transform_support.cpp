@@ -73,17 +73,14 @@ std::shared_ptr<SymbolicExpr> te_gt_condition(
 bool te_is_zero(const std::shared_ptr<SymbolicExpr>& e) {
     return e && LMCAS::detail::node(e) && e->is_zero();
 }
-std::optional<double> te_number_value(
+std::optional<Rational> te_number_value(
     const std::shared_ptr<const SymbolicNode>& node) {
     const auto number = std::dynamic_pointer_cast<const NumberNode>(node);
     if (!number) return std::nullopt;
     if (std::holds_alternative<BigInt>(number->value())) {
-        return std::get<BigInt>(number->value()).to_double();
+        return Rational(std::get<BigInt>(number->value()));
     }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value()).to_double();
-    }
-    return static_cast<double>(std::get<lmmc_real_t>(number->value()));
+    return std::get<Rational>(number->value());
 }
 BigInt te_factorial(const BigInt& n, ComputationContext& context) {
     auto result = BigInt::factorial_checked(n, context);
@@ -142,29 +139,26 @@ bool te_is_variable_square(
         exact_small_integer_node(power->exponent(), 2, 2).has_value();
 }
 
-std::optional<double> te_atomic_gaussian_rate(
+std::optional<Rational> te_atomic_gaussian_rate(
     const std::shared_ptr<const SymbolicNode>& argument,
     const std::string& variable) {
     auto parts = te_split_coeff(
         detail::make_expression_ptr(argument), variable);
     const auto coefficient = te_number_value(detail::node(parts.first));
-    if (!coefficient || !std::isfinite(*coefficient) ||
+    if (!coefficient ||
         !te_is_variable_square(detail::node(parts.second), variable) ||
-        !(*coefficient < 0.0)) {
+        !(*coefficient < Rational(0))) {
         return std::nullopt;
     }
-    const double rate = -*coefficient;
-    return std::isfinite(rate) && rate > 0.0
-        ? std::optional<double>(rate)
-        : std::nullopt;
+    return -*coefficient;
 }
 
 bool te_accumulate_gaussian_factor(
     const std::shared_ptr<const SymbolicNode>& factor,
-    const std::string& variable, double& coefficient,
+    const std::string& variable, Rational& coefficient,
     bool& has_variable_square) {
     if (const auto number = te_number_value(factor)) {
-        coefficient *= *number;
+        coefficient = coefficient * *number;
         return true;
     }
     if (!te_is_variable_square(factor, variable)) return false;
@@ -172,9 +166,9 @@ bool te_accumulate_gaussian_factor(
     return true;
 }
 
-std::optional<double> te_gaussian_product_rate(
+std::optional<Rational> te_gaussian_product_rate(
     const MultiplyNode& product, const std::string& variable) {
-    double coefficient = 1.0;
+    Rational coefficient(1);
     bool has_variable_square = false;
     for (const auto& factor : product.operands()) {
         if (!te_accumulate_gaussian_factor(
@@ -182,13 +176,13 @@ std::optional<double> te_gaussian_product_rate(
             return std::nullopt;
         }
     }
-    return has_variable_square && coefficient < 0.0
-        ? std::optional<double>(-coefficient)
+    return has_variable_square && coefficient < Rational(0)
+        ? std::optional<Rational>(-coefficient)
         : std::nullopt;
 }
 }
 
-std::optional<double> te_match_pure_gaussian(
+std::optional<Rational> te_match_pure_gaussian(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable) {
     if (!expression || !detail::node(expression)) return std::nullopt;
@@ -210,7 +204,7 @@ std::optional<GaussianMatch> te_match_scaled_gaussian(
     const std::string& variable) {
     auto parts = te_split_coeff(expression, variable);
     const auto coefficient = te_number_value(detail::node(parts.first));
-    if (!coefficient || !std::isfinite(*coefficient)) {
+    if (!coefficient) {
         return std::nullopt;
     }
     const auto function = std::dynamic_pointer_cast<const FunctionNode>(

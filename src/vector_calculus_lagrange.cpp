@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/vector_calculus_support.hpp"
 #include "vector_calculus_extrema.hpp"
 #include "integration.hpp"
@@ -23,12 +24,13 @@ using namespace vector_calculus_detail;
 
 static VectorCalculusFieldResult lagrange_gradient_strict(
     const std::shared_ptr<SymbolicExpr>& f,
-    const std::vector<std::string>& vars, const std::string& operation)
+    const std::vector<std::string>& vars, const std::string& operation,
+    detail::RewriteBudget& transform_budget)
 {
     VectorField gradient;
     gradient.reserve(vars.size());
     for (const auto& var : vars) {
-        auto partial = vector_calculus_differentiate_strict(f, var, operation);
+        auto partial = vector_calculus_differentiate_strict(f, var, operation, transform_budget);
         if (!partial) {
             return VectorCalculusFieldResult::failure(partial.error());
         }
@@ -97,7 +99,8 @@ static LagrangeResult solve_lagrange_strict(
 static LagrangeResult verify_lagrange_solutions(
     const std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>& full_solutions,
     const VectorField& equations, const std::vector<std::string>& all_vars,
-    const std::vector<std::string>& vars, ComputationContext& context, const std::string& operation)
+    const std::vector<std::string>& vars, ComputationContext& context, const std::string& operation,
+    detail::RewriteBudget& transform_budget)
 {
     std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> verified;
     std::set<std::string> var_set(vars.begin(), vars.end());
@@ -111,7 +114,7 @@ static LagrangeResult verify_lagrange_solutions(
         for (const auto& eq : equations) {
             auto residual = eq;
             for (const auto& [variable, value] : full_solution)
-                residual = residual->substitute(variable, value);
+                residual = detail::make_expression_ptr(detail::substitute_node(detail::node(residual), variable, detail::node(value), transform_budget));
             auto proof = check_zero_residual(residual, context);
             if (!proof) return LagrangeResult::failure(proof.error());
             if (!std::holds_alternative<ProvedZeroResidual>(proof.value())) {
@@ -144,18 +147,19 @@ static LagrangeResult verify_lagrange_solutions(
 static LagrangeResult lagrange_multipliers_strict(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& constraints,
-    const std::vector<std::string>& vars, ComputationContext& context, const std::string& operation)
+    const std::vector<std::string>& vars, ComputationContext& context, const std::string& operation,
+    detail::RewriteBudget& transform_budget)
 {
     const size_t n = vars.size();
     const size_t m = constraints.size();
-    auto gradient = lagrange_gradient_strict(f, vars, operation);
+    auto gradient = lagrange_gradient_strict(f, vars, operation, transform_budget);
     if (!gradient) {
         return LagrangeResult::failure(gradient.error());
     }
     std::vector<VectorField> grad_constraints;
     grad_constraints.reserve(m);
     for (const auto& constraint : constraints) {
-        auto partials = lagrange_gradient_strict(constraint, vars, operation);
+        auto partials = lagrange_gradient_strict(constraint, vars, operation, transform_budget);
         if (!partials) {
             return LagrangeResult::failure(partials.error());
         }
@@ -168,7 +172,7 @@ static LagrangeResult lagrange_multipliers_strict(
         auto equation = lagrange_stationarity_equation(
             gradient.value(), grad_constraints, lambda_names, i);
         auto checked = vector_calculus_simplify_strict(equation, operation,
-            "Lagrange stationarity equation is outside the supported domain");
+            "Lagrange stationarity equation is outside the supported domain", transform_budget);
         if (!checked) {
             return LagrangeResult::failure(checked.error());
         }
@@ -183,7 +187,7 @@ static LagrangeResult lagrange_multipliers_strict(
     if (!solutions) {
         return solutions;
     }
-    return verify_lagrange_solutions(solutions.value(), equations, all_vars, vars, context, operation);
+    return verify_lagrange_solutions(solutions.value(), equations, all_vars, vars, context, operation, transform_budget);
 }
 
 LagrangeResult lagrange_multipliers_checked(
@@ -192,6 +196,8 @@ LagrangeResult lagrange_multipliers_checked(
     const std::vector<std::string>& vars,
     ComputationContext& context)
 {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                          context.limits().max_ast_nodes, "lagrange_multipliers");
     const std::string operation = "lagrange_multipliers";
     auto valid = vector_calculus_validate_expr_vars(f, vars, context, operation);
     if (!valid) {
@@ -221,14 +227,17 @@ LagrangeResult lagrange_multipliers_checked(
     }
 
     try {
-        return lagrange_multipliers_strict(f, constraints, vars, context, operation);
+        return lagrange_multipliers_strict(f, constraints, vars, context, operation, transform_budget);
+    } catch (const CasError& error) {
+        return LagrangeResult::failure(error);
     } catch (const std::bad_alloc&) {
         return LagrangeResult::failure(CasErrc::ResourceLimit,
                                        "Lagrange multiplier allocation failed",
                                        operation);
+    } catch (const std::length_error& error) {
+        return LagrangeResult::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::exception& e) {
-        return LagrangeResult::failure(CasErrc::InternalInvariant,
-                                       e.what(), operation);
+        return LagrangeResult::failure(CasErrc::InternalInvariant, e.what(), operation);
     }
 }
 
@@ -246,6 +255,11 @@ std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>> lagrange_multi
     const std::vector<std::string>& vars)
 {
     auto result = lagrange_multipliers_checked(f, constraints, vars);
+    if (!result && result.error().code != CasErrc::Inconclusive &&
+        result.error().code != CasErrc::UnsupportedExpression &&
+        result.error().code != CasErrc::DomainError) {
+        throw result.error();
+    }
     return result ? std::move(result.value()) :
         std::vector<std::map<std::string, std::shared_ptr<SymbolicExpr>>>{};
 }

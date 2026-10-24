@@ -1,3 +1,4 @@
+#include "expr.hpp"
 /**
  * @file test_calculus_utils_differentials.cpp
  * @brief 微分与对数求导约定。
@@ -20,7 +21,7 @@ TEST(CalculusUtilsDifferentials, LogPolynomialDerivative) {
     auto result = LMCAS::log_differentiate(f, "x");
     EXPECT_TRUE((result != nullptr)) << "log_differentiate(x^2) non-null";
 
-    auto at3 = result->substitute("x", num(3))->simplify();
+    auto at3 = LMCAS::simplify(LMCAS::substitute(result, "x", num(3)).value()).value();
     auto val = test_numeric_eval(at3);
     if (val) {
         EXPECT_NEAR(*val, 6.0, 1e-9) << "log_differentiate(x^2) at x=3 = 6";
@@ -35,7 +36,7 @@ TEST(CalculusUtilsDifferentials, LogVariableExponent) {
     auto result = LMCAS::log_differentiate(f, "x");
     EXPECT_TRUE((result != nullptr)) << "log_differentiate(x^x) non-null";
 
-    auto at1 = result->substitute("x", num(1))->simplify();
+    auto at1 = LMCAS::simplify(LMCAS::substitute(result, "x", num(1)).value()).value();
     auto val = test_numeric_eval(at1);
     if (val) {
         EXPECT_NEAR(*val, 1.0, 1e-9) << "log_differentiate(x^x) at x=1 = 1";
@@ -50,7 +51,7 @@ TEST(CalculusUtilsDifferentials, LogProductDerivative) {
     auto result = LMCAS::log_differentiate(f, "x");
     EXPECT_TRUE((result != nullptr)) << "log_differentiate(x*(x+1)) non-null";
 
-    auto at2 = result->substitute("x", num(2))->simplify();
+    auto at2 = LMCAS::simplify(LMCAS::substitute(result, "x", num(2)).value()).value();
     auto val = test_numeric_eval(at2);
     if (val) {
         EXPECT_NEAR(*val, 5.0, 1e-9) << "log_differentiate(x*(x+1)) at x=2 = 5";
@@ -65,7 +66,7 @@ TEST(CalculusUtilsDifferentials, PolynomialDifferential) {
     auto result = LMCAS::differential(f, "x");
     EXPECT_TRUE((result != nullptr)) << "differential(x^3) non-null";
 
-    auto at2 = result->substitute("x", num(2))->simplify();
+    auto at2 = LMCAS::simplify(LMCAS::substitute(result, "x", num(2)).value()).value();
     auto val = test_numeric_eval(at2);
     if (val) {
         EXPECT_NEAR(*val, 12.0, 1e-9) << "differential(x^3) at x=2 = 12";
@@ -92,13 +93,13 @@ TEST(CalculusUtilsDifferentials, QuadraticTotalDifferential) {
 
     EXPECT_EQ((result[1].second), ("y")) << "second term variable is y";
 
-    auto dx_at = result[0].first->substitute("x", num(3))->substitute("y", num(4))->simplify();
+    auto dx_at = LMCAS::simplify(LMCAS::substitute(LMCAS::substitute(result[0].first, "x", num(3)).value(), "y", num(4)).value()).value();
     auto val_dx = test_numeric_eval(dx_at);
     if (val_dx) {
         EXPECT_NEAR(*val_dx, 6.0, 1e-9) << "df/dx at (3,4) = 6";
     }
 
-    auto dy_at = result[1].first->substitute("x", num(3))->substitute("y", num(4))->simplify();
+    auto dy_at = LMCAS::simplify(LMCAS::substitute(LMCAS::substitute(result[1].first, "x", num(3)).value(), "y", num(4)).value()).value();
     auto val_dy = test_numeric_eval(dy_at);
     if (val_dy) {
         EXPECT_NEAR(*val_dy, 8.0, 1e-9) << "df/dy at (3,4) = 8";

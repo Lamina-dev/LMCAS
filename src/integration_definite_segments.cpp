@@ -1,8 +1,9 @@
+#include <stdexcept>
+#include "internal/rewrite_budget.hpp"
+#include "internal/expression_transform.hpp"
 #include "internal/integration_definite_support.hpp"
 #include "limit_result.hpp"
 #include "internal/assumption_facts.hpp"
-#include "internal/visitors/normalization_visitor.hpp"
-#include "residual_verification.hpp"
 #include "root_of_identity.hpp"
 
 #include <unordered_map>
@@ -479,10 +480,6 @@ Result<Tribool> certify_continuity_checked(const SymbolicExpr& expression,
 }
 
 namespace {
-/**
- * @brief 生成实原函数候选，与被积函数的恒等改写分离。
- * 证明 u 恒为正或恒为负后，才将 ln(abs(u)) 分别化为 ln(u) 或 ln(-u)。
- */
 class RealPrimitiveCandidate final : public detail::SymbolicRewriter {
 public:
     RealPrimitiveCandidate(const SegmentFacts& facts, ComputationContext& context) : facts_(facts), context_(context) {}
@@ -531,98 +528,50 @@ static Result<SymbolicExpr> boundary_value_checked(const SymbolicExpr& primitive
     return divergent<SymbolicExpr>();
 }
 
-static ExpressionResult certify_primitive_derivative(SymbolicExpr& candidate,
-    const std::string& var, const SymbolicExpr& a, const SymbolicExpr& b,
-    const Result<Boundary>& lower, const Result<Boundary>& upper,
-    ComputationContext& context) {
-    if (!lower && !is_undecided(lower.error())) {
-        return ExpressionResult::failure(lower.error());
+static Result<void> prepare_segment_primitive(SymbolicExpr& candidate,
+    const std::string& var, const SymbolicExpr& lower, const SymbolicExpr& upper,
+    ComputationContext& context) try {
+    auto a = boundary_checked(lower, context);
+    auto b = boundary_checked(upper, context);
+    if (!a && !is_undecided(a.error())) {
+        return Result<void>::failure(a.error());
     }
-    if (!upper && !is_undecided(upper.error())) {
-        return ExpressionResult::failure(upper.error());
+    if (!b && !is_undecided(b.error())) {
+        return Result<void>::failure(b.error());
     }
-    if (lower && upper) {
+    if (a && b) {
         auto assumptions = real_assumptions(var, context);
-        if (!assumptions) { return ExpressionResult::failure(assumptions.error()); }
-        SegmentFacts facts(assumptions.value(), var, lower.value(), upper.value());
+        if (!assumptions) { return Result<void>::failure(assumptions.error()); }
+        SegmentFacts facts(assumptions.value(), var, a.value(), b.value());
         RealPrimitiveCandidate rewrite(facts, context);
         candidate = detail::expression_from_node(rewrite.rewrite(detail::node(candidate)));
-        if (rewrite.error) { return ExpressionResult::failure(*rewrite.error); }
+        if (rewrite.error) { return Result<void>::failure(*rewrite.error); }
     }
-    auto primitive_domain = certify_continuity_checked(candidate, var, a, b, context);
-    if (!primitive_domain) { return ExpressionResult::failure(primitive_domain.error()); }
-    if (primitive_domain.value() != Tribool::True) { return undecided<std::shared_ptr<SymbolicExpr>>(); }
-    auto derivative = candidate.differentiate(var);
-    if (!derivative) { return ExpressionResult::failure(CasErrc::InternalInvariant,
-        "primitive differentiation returned no expression", operation); }
-    auto derivative_domain = certify_continuity_checked(*derivative, var, a, b, context);
-    if (!derivative_domain) { return ExpressionResult::failure(derivative_domain.error()); }
-    if (derivative_domain.value() != Tribool::True) { return undecided<std::shared_ptr<SymbolicExpr>>(); }
-    return derivative;
-}
-
-static Result<void> prove_rational_derivative(const SymbolicExpr& effective,
-    const std::shared_ptr<SymbolicExpr>& derivative, const std::string& var,
-    ComputationContext& context) {
-    auto f = rational_checked(detail::node(effective), var, context);
-    auto d = rational_checked(detail::node(derivative), var, context);
-    if (!f) { return Result<void>::failure(f.error()); }
-    if (!d) { return Result<void>::failure(d.error()); }
-    if (!f.value() || !d.value()) { return undecided<void>(); }
-    auto left = product_checked(f.value()->numerator, d.value()->denominator, context);
-    auto right = product_checked(d.value()->numerator, f.value()->denominator, context);
-    if (!left) { return Result<void>::failure(left.error()); }
-    if (!right) { return Result<void>::failure(right.error()); }
-    auto proof = check_zero_residual(poly_to_symbolic(left.value() - right.value()), context);
-    if (!proof) { return Result<void>::failure(proof.error()); }
-    if (!std::holds_alternative<ProvedZeroResidual>(proof.value())) { return undecided<void>(); }
+    auto continuous = certify_continuity_checked(candidate, var, lower, upper, context);
+    if (!continuous) { return Result<void>::failure(continuous.error()); }
+    if (continuous.value() != Tribool::True) { return undecided<void>(); }
     return Result<void>::success();
-}
-
-static Result<void> prove_segment_derivative(SymbolicExpr& effective,
-    std::shared_ptr<SymbolicExpr>& derivative, const std::string& var,
-    const Result<Boundary>& lower, const Result<Boundary>& upper,
-    ComputationContext& context) {
-    if (lower && upper) {
-        auto assumptions = real_assumptions(var, context);
-        if (!assumptions) { return Result<void>::failure(assumptions.error()); }
-        SegmentFacts facts(assumptions.value(), var, lower.value(), upper.value());
-        NormalizationVisitor normalize_derivative(context, facts);
-        detail::node(derivative)->accept(normalize_derivative);
-        if (facts.error) { return Result<void>::failure(*facts.error); }
-        derivative = detail::make_expression_ptr(normalize_derivative.get_result());
-        NormalizationVisitor normalize_original(context, facts);
-        detail::node(effective)->accept(normalize_original);
-        if (facts.error) { return Result<void>::failure(*facts.error); }
-        effective = detail::expression_from_node(normalize_original.get_result());
-    }
-    auto residual = sym_sub(*derivative, effective);
-    if (lower && upper) {
-        auto assumptions = real_assumptions(var, context);
-        if (!assumptions) { return Result<void>::failure(assumptions.error()); }
-        SegmentFacts facts(assumptions.value(), var, lower.value(), upper.value());
-        NormalizationVisitor normalize_residual(context, facts);
-        detail::node(residual)->accept(normalize_residual);
-        if (facts.error) { return Result<void>::failure(*facts.error); }
-        residual = detail::make_expression_ptr(normalize_residual.get_result());
-    }
-    auto proof = check_zero_residual(residual, context);
-    if (!proof) { return Result<void>::failure(proof.error()); }
-    if (!std::holds_alternative<ProvedZeroResidual>(proof.value())) {
-        return prove_rational_derivative(effective, derivative, var, context);
-    }
-    return Result<void>::success();
+} catch (const CasError& error) {
+    return Result<void>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<void>::failure(CasErrc::ResourceLimit, "allocation failed", "prepare_segment_primitive");
+} catch (const std::length_error& error) {
+    return Result<void>::failure(CasErrc::ResourceLimit, error.what(), "prepare_segment_primitive");
+} catch (const std::exception& error) {
+    return Result<void>::failure(CasErrc::InternalInvariant, error.what(), "prepare_segment_primitive");
 }
 
 static Result<SymbolicExpr> evaluate_segment_endpoints(const SymbolicExpr& candidate,
     const std::string& var, const SymbolicExpr& a, const SymbolicExpr& b,
-    bool concrete_endpoints, ComputationContext& context) {
+    bool concrete_endpoints, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!concrete_endpoints) {
-        auto high = candidate.substitute(var, detail::make_expression_ptr(b));
-        auto low = candidate.substitute(var, detail::make_expression_ptr(a));
+        auto high = detail::make_expression_ptr(detail::substitute_node(detail::node(candidate), var, detail::node(b), transform_budget));
+        auto low = detail::make_expression_ptr(detail::substitute_node(detail::node(candidate), var, detail::node(a), transform_budget));
         if (!high || !low) { return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant,
             "primitive substitution returned no expression", operation); }
-        return *sym_sub(*high, *low)->simplify();
+        return *detail::make_expression_ptr(detail::normalize_node(detail::node(sym_sub(*high, *low)), transform_budget));
     }
     auto high = boundary_value_checked(candidate, var, b, LimitDirection::FromBelow, context);
     auto low = boundary_value_checked(candidate, var, a, LimitDirection::FromAbove, context);
@@ -632,7 +581,15 @@ static Result<SymbolicExpr> evaluate_segment_endpoints(const SymbolicExpr& candi
     const int ls = -infinity_sign(detail::node(low.value()));
     if (hs && ls && hs != ls) { return divergent<SymbolicExpr>(); }
     if (hs || ls) { return *SymbolicExpr::infinity(hs ? hs : ls); }
-    return *sym_sub(high.value(), low.value())->simplify();
+    return *detail::make_expression_ptr(detail::normalize_node(detail::node(sym_sub(high.value(), low.value())), transform_budget));
+} catch (const CasError& error) {
+    return Result<SymbolicExpr>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, "allocation failed", "evaluate_segment_endpoints");
+} catch (const std::length_error& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, error.what(), "evaluate_segment_endpoints");
+} catch (const std::exception& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant, error.what(), "evaluate_segment_endpoints");
 }
 
 Result<SymbolicExpr> definite_segment_checked(const SymbolicExpr& original,
@@ -642,15 +599,11 @@ Result<SymbolicExpr> definite_segment_checked(const SymbolicExpr& original,
     if (!continuous) { return Result<SymbolicExpr>::failure(continuous.error()); }
     if (continuous.value() == Tribool::False) { return divergent<SymbolicExpr>(); }
     if (continuous.value() != Tribool::True) { return undecided<SymbolicExpr>(); }
-    auto effective = segment_expression_checked(original, var, a, b, context);
-    if (!effective) { return effective; }
     SymbolicExpr candidate = primitive;
+    auto prepared = prepare_segment_primitive(candidate, var, a, b, context);
+    if (!prepared) { return Result<SymbolicExpr>::failure(prepared.error()); }
     auto lower = boundary_checked(a, context);
     auto upper = boundary_checked(b, context);
-    auto derivative = certify_primitive_derivative(candidate, var, a, b, lower, upper, context);
-    if (!derivative) { return Result<SymbolicExpr>::failure(derivative.error()); }
-    auto proof = prove_segment_derivative(effective.value(), derivative.value(), var, lower, upper, context);
-    if (!proof) { return Result<SymbolicExpr>::failure(proof.error()); }
     return evaluate_segment_endpoints(candidate, var, a, b, lower && upper, context);
 }
 }

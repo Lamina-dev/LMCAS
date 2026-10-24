@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_inequality_support.hpp"
 #include <stdexcept>
 
@@ -78,9 +79,9 @@ TEST(InequalityExamples, CheckedApproximateCoefficients) {
         SymbolicExpr::number(1));
     auto approximate_result = InequalitySolver::solve_inequality_checked(
         approximate, InequalityType::GreaterThan, "x");
-    EXPECT_TRUE((!approximate_result &&
-                 approximate_result.error().code == CasErrc::Inconclusive))
-        << "checked affine solving does not relabel approximate coefficients as exact";
+    ASSERT_TRUE(approximate_result);
+    EXPECT_FALSE(approximate_result.value().contains(-2.0));
+    EXPECT_TRUE(approximate_result.value().contains(-1.0));
 }
 
 TEST(InequalityExamples, CheckedSymbolicCoefficients) {
@@ -247,7 +248,7 @@ TEST(InequalityExamples, RepeatedRootExample) {
     auto x_minus_1 = SymbolicExpr::add(x, SymbolicExpr::number(-1));
     auto x_minus_1_sq = SymbolicExpr::power(x_minus_1, SymbolicExpr::number(2));
     auto x_plus_2 = SymbolicExpr::add(x, SymbolicExpr::number(2));
-    auto expr = SymbolicExpr::multiply(x_minus_1_sq, x_plus_2)->expand();
+    auto expr = LMCAS::expand(SymbolicExpr::multiply(x_minus_1_sq, x_plus_2)).value();
 
     auto result = InequalitySolver::solve_inequality(expr, InequalityType::GreaterThan, "x");
 

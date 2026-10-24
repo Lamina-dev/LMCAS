@@ -5,6 +5,7 @@
 #include "numeric_evaluation.hpp"
 #include "residual_verification.hpp"
 #include "assumption_context.hpp"
+#include "integrator.hpp"
 #include <optional>
 #include <stdexcept>
 
@@ -14,7 +15,7 @@ TEST(Calculus, Atan2Constant) {
     auto x = SymbolicExpr::variable("x");
 
     auto angle = SymbolicExpr::atan2(x, SymbolicExpr::number(1));
-    auto derivative = angle->differentiate("x");
+    auto derivative = LMCAS::differentiate(angle, "x").value();
     auto value = evaluate_numeric(*derivative, {{"x", 0.0}});
     EXPECT_TRUE((value && value.value().is_finite())) << "atan2(x, 1) derivative is finite at zero";
     if (value) {
@@ -96,13 +97,6 @@ TEST(Calculus, UnsupportedDerivatives) {
         EXPECT_TRUE((!floor_derivative &&
                      floor_derivative.error().code == CasErrc::UnsupportedExpression))
             << "unsupported unary derivative reports UnsupportedExpression";
-        bool threw = false;
-        try {
-            (void)floor_expression.value()->differentiate("x");
-        } catch (const std::runtime_error &) {
-            threw = true;
-        }
-        EXPECT_TRUE((threw)) << "unchecked unsupported differentiation throws";
     }
 }
 
@@ -168,24 +162,18 @@ static void check_primitive(const std::shared_ptr<SymbolicExpr> &primitive,
 TEST(Calculus, PolynomialIntegrals) {
     auto x = SymbolicExpr::variable("x");
 
-    auto integ = x->integrate("x");
-    check_primitive(integ, x, 1.5);
+    Integrator integrator;
+    ComputationContext context;
+    auto integ = integrator.integrate_checked(*x, "x", context);
+    ASSERT_TRUE(integ);
+    check_primitive(std::make_shared<SymbolicExpr>(std::move(integ.value())), x, 1.5);
 
     auto x2 = SymbolicExpr::power(x, SymbolicExpr::number(2));
-    auto integ2 = x2->integrate("x");
-    check_primitive(integ2, x2, 7.0 / 3.0);
+    auto integ2 = integrator.integrate_checked(*x2, "x", context);
+    ASSERT_TRUE(integ2);
+    check_primitive(std::make_shared<SymbolicExpr>(std::move(integ2.value())), x2, 7.0 / 3.0);
 }
 
-TEST(Calculus, StaticIntegralReturnsCertifiedPrimitive) {
-    auto x = SymbolicExpr::variable("x");
-    auto integrand = SymbolicExpr::power(x, SymbolicExpr::number(2));
-    auto primitive = SymbolicExpr::integral(integrand, "x");
-    ASSERT_TRUE(primitive);
-
-    auto derivative = primitive->differentiate("x");
-    ASSERT_TRUE(derivative);
-    EXPECT_TRUE(test_proved_equivalent(derivative, integrand));
-}
 
 TEST(Calculus, SinOverXExpressionLimitReturnsOne) {
     auto x = SymbolicExpr::variable("x");
@@ -201,17 +189,22 @@ TEST(Calculus, LogarithmicIntegral) {
     auto x = SymbolicExpr::variable("x");
 
     auto x_inv = SymbolicExpr::power(x, SymbolicExpr::number(-1));
-    auto integ = x_inv->integrate("x");
-    check_primitive(integ, x_inv, std::log(2.0));
+    Integrator integrator;
+    ComputationContext context;
+    auto integ = integrator.integrate_checked(*x_inv, "x", context);
+    ASSERT_TRUE(integ);
+    check_primitive(std::make_shared<SymbolicExpr>(std::move(integ.value())), x_inv, std::log(2.0));
 }
 
 TEST(Calculus, IntegralLinearity) {
     auto x = SymbolicExpr::variable("x");
 
     auto f = SymbolicExpr::add(x, SymbolicExpr::number(1));
-    auto integ = f->integrate("x");
-
-    check_primitive(integ, f, 2.5);
+    Integrator integrator;
+    ComputationContext context;
+    auto integ = integrator.integrate_checked(*f, "x", context);
+    ASSERT_TRUE(integ);
+    check_primitive(std::make_shared<SymbolicExpr>(std::move(integ.value())), f, 2.5);
 }
 
 static void check_lambert_origin_derivatives(const std::shared_ptr<SymbolicExpr> &x) {
@@ -223,13 +216,13 @@ static void check_lambert_origin_derivatives(const std::shared_ptr<SymbolicExpr>
             continue;
         }
         auto direct = evaluate_numeric(*derivative.value(), {{"x", 0.0}});
-        auto at_zero = derivative.value()->substitute("x", SymbolicExpr::number(0));
+        auto at_zero = LMCAS::substitute(derivative.value(), "x", SymbolicExpr::number(0)).value();
         auto substituted = evaluate_numeric(*at_zero);
         EXPECT_TRUE((direct && direct.value().is_finite() && direct.value().value == scale)) << "direct evaluation at zero includes the inner derivative";
         EXPECT_TRUE((substituted && substituted.value().is_finite() &&
                      substituted.value().value == scale))
             << "substitution at zero preserves the removable derivative value";
-        auto exact = at_zero->simplify();
+        auto exact = LMCAS::simplify(at_zero).value();
         EXPECT_TRUE((exact && detail::node(exact)->equals(
                                   *detail::node(SymbolicExpr::number(scale)))))
             << "zero-point derivative simplifies to its exact integer value";

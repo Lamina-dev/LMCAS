@@ -90,7 +90,7 @@ static int check_valid_equivalence_budget() {
     }
     valid_budget_options.budget.max_rewrite_depth = 8;
     ComputationContext context;
-    auto exhausted = equivalent_core(*chain, *chain, context, valid_budget_options);
+    auto exhausted = equivalent(*chain, *chain, context, valid_budget_options);
     if (exhausted || exhausted.error().code != CasErrc::ResourceLimit ||
         std::string(error_name(exhausted.error())) != "EqvBudgetExceeded") {
         std::cerr << "failed to exhaust nonzero LMCAS rewrite depth budget\n";
@@ -124,7 +124,7 @@ static int check_exhausted_core_equivalence() {
     (void)LMCAS::set_eqv_budget(exhausted_eqv_options, 1, 64, 4);
     exhausted_eqv_options.budget.max_rewrite_steps = 0;
     LMCAS::ComputationContext exhausted_eqv_context;
-    auto exhausted_eqv = LMCAS::equivalent_core(
+    auto exhausted_eqv = LMCAS::equivalent(
         *i_squared, *SymbolicExpr::number(-1), exhausted_eqv_context,
         exhausted_eqv_options);
     if (exhausted_eqv ||
@@ -142,7 +142,7 @@ static int check_additive_identity() {
     auto x_plus_zero = SymbolicExpr::add(x, SymbolicExpr::number(0));
     LMCAS::ComputationContext identity_eqv_context;
     auto identity_eqv =
-        LMCAS::equivalent_core(*x_plus_zero, *x, identity_eqv_context);
+        LMCAS::equivalent(*x_plus_zero, *x, identity_eqv_context);
     if (!identity_eqv || !identity_eqv.value()) {
         std::cerr << "failed to prove LMCAS Core identity example\n";
         return 11;
@@ -157,13 +157,13 @@ static int check_multiplicative_identities() {
     auto x_minus_x = SymbolicExpr::add(
         x, SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
     LMCAS::ComputationContext multiply_identity_context;
-    auto multiply_identity = LMCAS::equivalent_core(
+    auto multiply_identity = LMCAS::equivalent(
         *x_times_one, *x, multiply_identity_context);
     LMCAS::ComputationContext multiply_zero_context;
-    auto multiply_zero = LMCAS::equivalent_core(
+    auto multiply_zero = LMCAS::equivalent(
         *x_times_zero, *SymbolicExpr::number(0), multiply_zero_context);
     LMCAS::ComputationContext subtract_self_context;
-    auto subtract_self = LMCAS::equivalent_core(
+    auto subtract_self = LMCAS::equivalent(
         *x_minus_x, *SymbolicExpr::number(0), subtract_self_context);
     if (!multiply_identity || !multiply_identity.value() ||
         !multiply_zero || !multiply_zero.value() ||
@@ -183,7 +183,7 @@ static int check_polynomial_equivalence() {
                           SymbolicExpr::multiply(SymbolicExpr::number(2), x)),
         SymbolicExpr::number(1));
     LMCAS::ComputationContext polynomial_eqv_context;
-    auto polynomial_eqv = LMCAS::equivalent_core(
+    auto polynomial_eqv = LMCAS::equivalent(
         *x_plus_one_squared, *expanded_square, polynomial_eqv_context);
     if (!polynomial_eqv || !polynomial_eqv.value()) {
         std::cerr << "failed to prove LMCAS polynomial equivalence example\n";
@@ -203,7 +203,7 @@ static int check_trigonometric_core_equivalence() {
         return 11;
     }
     LMCAS::ComputationContext trig_eqv_context;
-    auto trig_eqv = LMCAS::equivalent_core(
+    auto trig_eqv = LMCAS::equivalent(
         *trig_identity, *SymbolicExpr::number(1), trig_eqv_context,
         trig_eqv_options);
     if (!trig_eqv || !trig_eqv.value()) {
@@ -247,7 +247,7 @@ static int check_exponential_profile() {
         return 11;
     }
     LMCAS::ComputationContext exp_log_eqv_context;
-    auto exp_log_eqv = LMCAS::equivalent_core(
+    auto exp_log_eqv = LMCAS::equivalent(
         *SymbolicExpr::exp(SymbolicExpr::number(0)), *SymbolicExpr::number(1),
         exp_log_eqv_context, exp_log_eqv_options);
     if (!exp_log_eqv || !exp_log_eqv.value()) {
@@ -269,7 +269,7 @@ static int check_logarithmic_profile() {
         return 11;
     }
     LMCAS::ComputationContext ln_one_eqv_context;
-    auto ln_one_eqv = LMCAS::equivalent_core(
+    auto ln_one_eqv = LMCAS::equivalent(
         *SymbolicExpr::ln(SymbolicExpr::number(1)), *SymbolicExpr::number(0),
         ln_one_eqv_context, exp_log_eqv_options);
     if (!ln_one_eqv || !ln_one_eqv.value()) {
@@ -293,7 +293,7 @@ static int check_unproven_log_domain() {
     }
     auto exp_ln_x = SymbolicExpr::exp(SymbolicExpr::ln(x));
     LMCAS::ComputationContext exp_ln_unproven_context;
-    auto exp_ln_unproven = LMCAS::equivalent_core(
+    auto exp_ln_unproven = LMCAS::equivalent(
         *exp_ln_x, *x, exp_ln_unproven_context, exp_log_eqv_options);
     if (exp_ln_unproven ||
         exp_ln_unproven.error().code != LMCAS::CasErrc::Inconclusive) {
@@ -328,7 +328,7 @@ static int check_positive_log_domain() {
         std::cerr << "failed to attach LMCAS equivalence assumptions\n";
         return 11;
     }
-    auto exp_ln_positive = LMCAS::equivalent_core(
+    auto exp_ln_positive = LMCAS::equivalent(
         *exp_ln_x, *x, exp_ln_positive_context, exp_log_eqv_options);
     if (!exp_ln_positive || !exp_ln_positive.value()) {
         std::cerr << "failed to prove LMCAS exp(ln(x)) under positive assumption\n";

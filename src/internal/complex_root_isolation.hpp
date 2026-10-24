@@ -1,3 +1,4 @@
+#include "computation_context.hpp"
 #pragma once
 
 #include "internal/exact_root.hpp"

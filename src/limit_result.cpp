@@ -1,3 +1,6 @@
+#include <stdexcept>
+#include "internal/rewrite_budget.hpp"
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/assumption_facts.hpp"
@@ -60,7 +63,9 @@ LimitResult classify_limit_result(const NodePtr& node, const std::string& variab
     ComputationContext& context, const FactsQuery& facts, Domain domain = Domain::Real);
 
 LimitResult classify_infinite_sum(const AddNode& sum, const std::string& variable,
-    ComputationContext& context, const FactsQuery& facts, Domain domain) {
+    ComputationContext& context, const FactsQuery& facts, Domain domain) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     int sign = 0;
     std::vector<NodePtr> finite_terms;
     for (const auto& term : sum.operands()) {
@@ -72,12 +77,22 @@ LimitResult classify_infinite_sum(const AddNode& sum, const std::string& variabl
         else { finite_terms.push_back(detail::node(std::get<FiniteLimit>(value.value().value).value)); }
     }
     if (sign) { return sign > 0 ? outcome(PositiveInfinityLimit{}) : outcome(NegativeInfinityLimit{}); }
-    auto finite = detail::make_expression_ptr(detail::make_node<AddNode>(std::move(finite_terms)))->simplify();
+    auto finite = detail::make_expression_ptr(detail::normalize_node(detail::make_node<AddNode>(std::move(finite_terms)), transform_budget));
     return finite ? classify_limit_result(detail::node(finite), variable, context, facts, domain) : unknown();
+} catch (const CasError& error) {
+    return LimitResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LimitResult::failure(CasErrc::ResourceLimit, "allocation failed", "classify_infinite_sum");
+} catch (const std::length_error& error) {
+    return LimitResult::failure(CasErrc::ResourceLimit, error.what(), "classify_infinite_sum");
+} catch (const std::exception& error) {
+    return LimitResult::failure(CasErrc::InternalInvariant, error.what(), "classify_infinite_sum");
 }
 
 LimitResult classify_infinite_product(const MultiplyNode& product, const std::string& variable,
-    ComputationContext& context, const FactsQuery& facts, Domain domain) {
+    ComputationContext& context, const FactsQuery& facts, Domain domain) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     int sign = 1;
     bool infinite = false;
     std::vector<NodePtr> finite_factors;
@@ -97,8 +112,16 @@ LimitResult classify_infinite_product(const MultiplyNode& product, const std::st
         }
         return sign > 0 ? outcome(PositiveInfinityLimit{}) : outcome(NegativeInfinityLimit{});
     }
-    auto finite = detail::make_expression_ptr(detail::make_node<MultiplyNode>(std::move(finite_factors)))->simplify();
+    auto finite = detail::make_expression_ptr(detail::normalize_node(detail::make_node<MultiplyNode>(std::move(finite_factors)), transform_budget));
     return finite ? classify_limit_result(detail::node(finite), variable, context, facts, domain) : unknown();
+} catch (const CasError& error) {
+    return LimitResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LimitResult::failure(CasErrc::ResourceLimit, "allocation failed", "classify_infinite_product");
+} catch (const std::length_error& error) {
+    return LimitResult::failure(CasErrc::ResourceLimit, error.what(), "classify_infinite_product");
+} catch (const std::exception& error) {
+    return LimitResult::failure(CasErrc::InternalInvariant, error.what(), "classify_infinite_product");
 }
 
 LimitResult classify_infinite_power(const PowerNode& power, const std::string& variable,
@@ -346,7 +369,7 @@ std::optional<LimitResult> oscillatory_one_sided_limit(const NodePtr& node,
 
 LimitResult evaluate_one_sided_node(const NodePtr& node, const std::string& variable,
     const LimitExprPtr& point, LimitDirection direction, ComputationContext& context,
-    const AssumptionContext& local, const FactsQuery& facts, LimitVisitor& visitor) {
+    const AssumptionContext& local, const FactsQuery& facts, LimitVisitor& visitor) try {
     if (!expression_depends_on_variable(node, variable))
         { return classify_limit_result(node, variable, context, facts); }
     auto original_domain = detail::domain_constraints(node, facts, Domain::Real, context);
@@ -360,10 +383,20 @@ LimitResult evaluate_one_sided_node(const NodePtr& node, const std::string& vari
     }
     auto oscillatory = oscillatory_one_sided_limit(node, variable, point, direction, context, facts, visitor);
     if (oscillatory) { return std::move(*oscillatory); }
-    auto prepared = local.simplify(detail::expression_from_node(node));
-    if (!prepared) { return unknown(); }
-    detail::node(prepared)->accept(visitor);
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "limit");
+    detail::AssumptionFacts local_facts(local);
+    auto prepared = detail::normalize_node(node, budget, local_facts);
+    prepared->accept(visitor);
     return classify_limit_result(visitor.get_result(), variable, context, facts);
+} catch (const CasError& error) {
+    return LimitResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LimitResult::failure(CasErrc::ResourceLimit, "allocation failed", "evaluate_one_sided_node");
+} catch (const std::length_error& error) {
+    return LimitResult::failure(CasErrc::ResourceLimit, error.what(), "evaluate_one_sided_node");
+} catch (const std::exception& error) {
+    return LimitResult::failure(CasErrc::InternalInvariant, error.what(), "evaluate_one_sided_node");
 }
 
 
@@ -434,7 +467,9 @@ private:
 };
 
 Result<bool> complex_polynomial_nonzero(const RelationalNode& relation, const std::string& variable,
-    const FactsQuery& facts, ComputationContext& context, std::vector<NodePtr>& nonzero_bases) {
+    const FactsQuery& facts, ComputationContext& context, std::vector<NodePtr>& nonzero_bases) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto difference = SymbolicExpr::add(detail::make_expression_ptr(relation.left()),
         SymbolicExpr::multiply(SymbolicExpr::number(-1), detail::make_expression_ptr(relation.right())));
     auto polynomial = symbolic_to_poly<SymbolicPolyCoeff>(difference, variable);
@@ -454,10 +489,18 @@ Result<bool> complex_polynomial_nonzero(const RelationalNode& relation, const st
         nonzero |= value.value() == Tribool::True;
     }
     if (!nonzero) { return false; }
-    auto normalized = difference->simplify();
+    auto normalized = detail::make_expression_ptr(detail::normalize_node(detail::node(difference), transform_budget));
     if (!normalized) { return false; }
     nonzero_bases.push_back(detail::node(normalized));
     return true;
+} catch (const CasError& error) {
+    return Result<bool>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, "allocation failed", "complex_polynomial_nonzero");
+} catch (const std::length_error& error) {
+    return Result<bool>::failure(CasErrc::ResourceLimit, error.what(), "complex_polynomial_nonzero");
+} catch (const std::exception& error) {
+    return Result<bool>::failure(CasErrc::InternalInvariant, error.what(), "complex_polynomial_nonzero");
 }
 
 Result<bool> complex_punctured_condition(const NodePtr& condition, const std::string& variable,
@@ -507,7 +550,9 @@ Result<void> validate_limit_input(const LimitExprPtr& expression, const std::str
 }
 
 LimitResult limit_complex_at_point(const LimitExprPtr& expression, const std::string& variable,
-    const LimitExprPtr& point, ComputationContext& context, const FactsQuery& facts) {
+    const LimitExprPtr& point, ComputationContext& context, const FactsQuery& facts) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (has_infinity(detail::node(expression))) { return unknown(); }
     if (!expression_depends_on_variable(detail::node(expression), variable)) {
         return classify_limit_result(detail::node(expression), variable, context, facts, Domain::Complex);
@@ -519,11 +564,11 @@ LimitResult limit_complex_at_point(const LimitExprPtr& expression, const std::st
     if (!domain_proof) { return LimitResult::failure(domain_proof.error()); }
     if (!domain_proof.value()) { return unknown(); }
     ComplexPuncturedFacts punctured(facts, nonzero_bases);
-    NormalizationVisitor normalizer(context, punctured, Domain::Complex);
+    NormalizationVisitor normalizer(transform_budget, punctured, Domain::Complex);
     detail::node(expression)->accept(normalizer);
     auto prepared = normalizer.get_result();
     if (!prepared) { return unknown(); }
-    auto substituted = substitute_free(prepared, variable, detail::node(point));
+    auto substituted = substitute_free(prepared, variable, detail::node(point), &transform_budget);
     if (!substituted) { return unknown(); }
     auto defined = detail::query_definedness(substituted, facts, Domain::Complex, context);
     if (!defined) { return LimitResult::failure(defined.error()); }
@@ -531,6 +576,14 @@ LimitResult limit_complex_at_point(const LimitExprPtr& expression, const std::st
     substituted->accept(normalizer);
     auto value = normalizer.get_result();
     return value ? classify_limit_result(value, variable, context, facts, Domain::Complex) : unknown();
+} catch (const CasError& error) {
+    return LimitResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LimitResult::failure(CasErrc::ResourceLimit, "allocation failed", "limit_complex_at_point");
+} catch (const std::length_error& error) {
+    return LimitResult::failure(CasErrc::ResourceLimit, error.what(), "limit_complex_at_point");
+} catch (const std::exception& error) {
+    return LimitResult::failure(CasErrc::InternalInvariant, error.what(), "limit_complex_at_point");
 }
 
 LimitResult limit_real_at_point(const LimitExprPtr& expression, const std::string& variable,
@@ -552,18 +605,28 @@ LimitResult limit_real_at_point(const LimitExprPtr& expression, const std::strin
 
 LimitResult limit_at_checked_point(const LimitExprPtr& expression, const std::string& variable,
     const LimitExprPtr& point, LimitDirection direction, ComputationContext& context,
-    const FactsQuery& facts, Domain domain) {
+    const FactsQuery& facts, Domain domain) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto endpoint = classify_limit_result(detail::node(point), variable, context, facts, domain);
     if (!endpoint) { return endpoint; }
     const int endpoint_sign = infinity_sign(endpoint.value().value);
     if (domain == Domain::Complex && endpoint_sign) { return unknown(); }
     auto canonical_point = endpoint_sign ? SymbolicExpr::infinity(endpoint_sign)
-        : std::get<FiniteLimit>(endpoint.value().value).value->simplify();
+        : detail::make_expression_ptr(detail::normalize_node(detail::node(std::get<FiniteLimit>(endpoint.value().value).value), transform_budget));
     if (!canonical_point) { return unknown(); }
     if (domain == Domain::Complex) {
         return limit_complex_at_point(expression, variable, canonical_point, context, facts);
     }
     return limit_real_at_point(expression, variable, canonical_point, direction, endpoint_sign, context);
+} catch (const CasError& error) {
+    return LimitResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return LimitResult::failure(CasErrc::ResourceLimit, "allocation failed", "limit_at_checked_point");
+} catch (const std::length_error& error) {
+    return LimitResult::failure(CasErrc::ResourceLimit, error.what(), "limit_at_checked_point");
+} catch (const std::exception& error) {
+    return LimitResult::failure(CasErrc::InternalInvariant, error.what(), "limit_at_checked_point");
 }
 }
 

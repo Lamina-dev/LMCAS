@@ -89,7 +89,7 @@ private:
      */
     static bool is_linear_in_unknowns(
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-        const std::vector<std::string>& unknowns);
+        const std::vector<std::string>& unknowns, ComputationContext& context);
 };
 
 }

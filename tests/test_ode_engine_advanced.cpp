@@ -1,8 +1,10 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
 #include "numeric_evaluation.hpp"
 #include <limits>
+#include "assumption_context.hpp"
 
 using namespace LMCAS;
 
@@ -31,21 +33,25 @@ TEST(OdeEngineAdvanced, VariationSecant) {
     auto y2 = SymbolicExpr::sin(x);
     auto g = SymbolicExpr::divide(SymbolicExpr::number(1), SymbolicExpr::cos(x));
 
-    auto checked = solve_variation_of_parameters_checked(y1, y2, g, "x");
+    auto assumptions = std::make_shared<AssumptionContext>();
+    ASSERT_TRUE(assumptions->assume_domain_checked("x", Domain::Real));
+    ComputationContext context;
+    ASSERT_TRUE(context.set_assumptions(assumptions));
+    auto checked = solve_variation_of_parameters_checked(y1, y2, g, "x", context);
     ASSERT_TRUE(checked);
     const auto &sol = checked.value();
     ASSERT_TRUE(sol.general_solution);
     EXPECT_TRUE(sol.constants.empty())
         << "variation of parameters returns a particular solution";
 
-    auto first_derivative = sol.general_solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(sol.general_solution, "x", context).value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x", context).value();
     ASSERT_TRUE(second_derivative);
     auto lhs = SymbolicExpr::add(second_derivative, sol.general_solution);
     for (double point : {-1.0, -0.5, 0.5, 1.0}) {
-        auto value = evaluate_numeric(*lhs, {{"x", point}});
-        ASSERT_TRUE(value);
+        auto value = evaluate_numeric(*lhs, {{"x", point}}, context);
+        ASSERT_TRUE(value) << value.error().message << "; " << sol.general_solution->to_string();
         ASSERT_TRUE(value.value().is_finite());
         EXPECT_NEAR(value.value().value, 1.0 / std::cos(point), 1e-9)
             << "variation solution satisfies y''+y=sec(x) at x=" << point;
@@ -72,9 +78,9 @@ TEST(OdeEngineAdvanced, VariationExponential) {
     ASSERT_TRUE(checked);
     auto solution = checked.value().general_solution;
     ASSERT_TRUE(solution);
-    auto first_derivative = solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(solution, "x").value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x").value();
     ASSERT_TRUE(second_derivative);
     auto lhs = SymbolicExpr::add(
         second_derivative,
@@ -145,7 +151,7 @@ TEST(OdeEngineAdvanced, OrdinarySeries) {
     double factorial = 1.0;
     for (std::size_t order = 0; order < expected_coefficients.size(); ++order) {
         if (order != 0) {
-            derivative = derivative->differentiate("x");
+            derivative = LMCAS::differentiate(derivative, "x").value();
             ASSERT_TRUE(derivative);
             factorial *= static_cast<double>(order);
         }
@@ -157,9 +163,9 @@ TEST(OdeEngineAdvanced, OrdinarySeries) {
             << "coefficient of x^" << order;
     }
 
-    auto first_derivative = sol.series_solution->differentiate("x");
+    auto first_derivative = LMCAS::differentiate(sol.series_solution, "x").value();
     ASSERT_TRUE(first_derivative);
-    auto second_derivative = first_derivative->differentiate("x");
+    auto second_derivative = LMCAS::differentiate(first_derivative, "x").value();
     ASSERT_TRUE(second_derivative);
     auto residual = SymbolicExpr::add(second_derivative, sol.series_solution);
     for (double point : {-1.0, -0.5, 0.5, 1.0}) {

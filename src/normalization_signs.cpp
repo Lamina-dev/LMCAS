@@ -3,12 +3,6 @@
 namespace LMCAS {
 namespace {
 std::shared_ptr<const NumberNode> positive_negative_number(const NumberNode& number) {
-    if (const auto* real = std::get_if<lmmc_real_t>(&number.value())) {
-        if (*real < 0) {
-            return detail::make_node<NumberNode>(std::abs(*real));
-        }
-        return nullptr;
-    }
     if (const auto* integer = std::get_if<BigInt>(&number.value())) {
         if (integer->is_negative()) {
             return detail::make_node<NumberNode>(*integer * BigInt(-1));

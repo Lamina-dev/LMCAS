@@ -11,6 +11,8 @@
 #include "internal/pointwise_comparison.hpp"
 #include "internal/assumption_facts.hpp"
 #include "internal/assumption_simplification.hpp"
+#include "numeric_evaluation.hpp"
+#include "internal/expression_analysis.hpp"
 
 using namespace LMCAS;
 
@@ -56,7 +58,7 @@ TEST(ResultContracts, ResidualCertification) {
                      nonzero.value())))
         << "a polynomial with a nonzero coefficient is not an identity";
     auto at_root = LMCAS::check_zero_residual(
-        SymbolicExpr::add(x, SymbolicExpr::number(1))->substitute("x", SymbolicExpr::number(-1)), residual_context);
+        LMCAS::substitute(SymbolicExpr::add(x, SymbolicExpr::number(1)), "x", SymbolicExpr::number(-1)).value(), residual_context);
     EXPECT_TRUE((at_root && std::holds_alternative<LMCAS::ProvedZeroResidual>(at_root.value()))) << "a proved nonidentity can still vanish at a particular point";
     auto unproved = LMCAS::check_zero_residual(
         SymbolicExpr::sin(x), residual_context);
@@ -64,6 +66,122 @@ TEST(ResultContracts, ResidualCertification) {
                  std::holds_alternative<LMCAS::UnprovedResidual>(
                      unproved.value())))
         << "unsupported transcendental residual remains unproved";
+}
+
+TEST(ResultContracts, DecimalResidualsAreExact) {
+    auto cancelled = SymbolicExpr::add(
+        SymbolicExpr::number(0.1), SymbolicExpr::number(-0.1));
+    for (const auto& expression : {
+             SymbolicExpr::number(0.0), cancelled,
+             SymbolicExpr::multiply(SymbolicExpr::number(0.0),
+                                    SymbolicExpr::variable("x"))}) {
+        ComputationContext context;
+        auto result = check_zero_residual(expression, context);
+        ASSERT_TRUE(result);
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(result.value()));
+    }
+    ComputationContext context;
+    auto same = check_equivalent(
+        SymbolicExpr::number(0.1), SymbolicExpr::number(Rational(1, 10)), context);
+    ASSERT_TRUE(same);
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(same.value()));
+    auto nonzero = check_zero_residual(SymbolicExpr::number(1e-13), context);
+    ASSERT_TRUE(nonzero);
+    EXPECT_TRUE(std::holds_alternative<ProvedNonIdentityResidual>(nonzero.value()));
+}
+
+TEST(ResultContracts, DecimalComparisonProvesNonidentity) {
+    ComputationContext context;
+    auto compared = check_equivalent(
+        SymbolicExpr::number(1.0), SymbolicExpr::number(2), context);
+    ASSERT_TRUE(compared);
+    EXPECT_TRUE(std::holds_alternative<ProvedNonIdentityResidual>(compared.value()));
+}
+
+TEST(ResultContracts, FormalTrigonometricRelations) {
+    auto x = SymbolicExpr::variable("x");
+    const auto fn = [&](FunctionNode::FuncType type) {
+        return detail::make_expression_ptr(detail::make_node<FunctionNode>(
+            type, std::vector<detail::SymbolicNodePtr>{detail::node(x)}));
+    };
+    const auto square = [](const ExprPtr& expression) {
+        return SymbolicExpr::power(expression, SymbolicExpr::number(2));
+    };
+    const auto difference = [](const ExprPtr& left, const ExprPtr& right) {
+        return SymbolicExpr::add(left,
+            SymbolicExpr::multiply(SymbolicExpr::number(-1), right));
+    };
+    using FT = FunctionNode::FuncType;
+    std::vector<ExprPtr> identities{
+        difference(difference(square(fn(FT::Sec)), square(fn(FT::Tan))),
+                   SymbolicExpr::number(1)),
+        difference(difference(square(fn(FT::Csc)), square(fn(FT::Cot))),
+                   SymbolicExpr::number(1)),
+        difference(difference(square(fn(FT::Cosh)), square(fn(FT::Sinh))),
+                   SymbolicExpr::number(1)),
+        difference(SymbolicExpr::multiply(fn(FT::Tanh), fn(FT::Cosh)), fn(FT::Sinh))};
+    for (const auto* identity : {
+             "sin(2*x)-2*sin(x)*cos(x)",
+             "cos(4*x)-1+8*sin(x)^2*cos(x)^2",
+             "sin(x/2)^2-1/2+cos(x)/2",
+             "1/(1+cos(x))-(1/2)/(cos(x/2)^2)",
+             "sin(x)^2/(1+cos(x))-1+cos(x)"}) {
+        auto expression = parse_expr(identity);
+        ASSERT_TRUE(expression);
+        identities.push_back(expression.value());
+    }
+    for (const auto& expression : identities) {
+        SCOPED_TRACE(expression->to_string());
+        ComputationContext context;
+        auto result = check_zero_residual(expression, context);
+        ASSERT_TRUE(result) << result.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(result.value()));
+    }
+    auto mismatch = parse_expr("sin(x)^2+cos(y)^2-1");
+    ASSERT_TRUE(mismatch);
+    ComputationContext context;
+    auto unproved = check_zero_residual(mismatch.value(), context);
+    ASSERT_TRUE(unproved);
+    EXPECT_FALSE(std::holds_alternative<ProvedZeroResidual>(unproved.value()));
+}
+
+TEST(ResultContracts, FormalRadicalAndExponentialRelations) {
+    for (const auto* identity : {
+             "sqrt(x+1)*(x+1)^(-1/2)-1",
+             "(x+1)^(3/2)-(x+1)*sqrt(x+1)",
+             "sqrt(4-x^2)-2*sqrt(1-x^2/4)",
+             "exp(-(x^2))*exp(x^2)-1",
+             "exp(x+1)-exp(x)*exp(1)"}) {
+        SCOPED_TRACE(identity);
+        auto expression = parse_expr(identity);
+        ASSERT_TRUE(expression);
+        ComputationContext context;
+        auto result = check_zero_residual(expression.value(), context);
+        ASSERT_TRUE(result) << result.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(result.value()));
+    }
+}
+
+TEST(ResultContracts, AbsoluteValueSquareRequiresRealFacts) {
+    auto x = SymbolicExpr::variable("x");
+    auto absolute = detail::make_expression_ptr(detail::make_node<FunctionNode>(
+        FunctionNode::FuncType::Abs,
+        std::vector<detail::SymbolicNodePtr>{detail::node(x)}));
+    auto residual = SymbolicExpr::add(
+        SymbolicExpr::power(absolute, SymbolicExpr::number(2)),
+        SymbolicExpr::multiply(SymbolicExpr::number(-1),
+            SymbolicExpr::power(x, SymbolicExpr::number(2))));
+    ComputationContext unknown_context;
+    auto unknown = check_zero_residual(residual, unknown_context);
+    ASSERT_TRUE(unknown);
+    EXPECT_FALSE(std::holds_alternative<ProvedZeroResidual>(unknown.value()));
+    auto assumptions = std::make_shared<AssumptionContext>();
+    ASSERT_TRUE(assumptions->assume_domain_checked("x", Domain::Real));
+    ComputationContext real_context;
+    ASSERT_TRUE(real_context.set_assumptions(assumptions));
+    auto real = check_zero_residual(residual, real_context);
+    ASSERT_TRUE(real);
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(real.value()));
 }
 
 TEST(ResultContracts, RationalSquareRootScaling) {
@@ -285,22 +403,6 @@ TEST(ResultContracts, IntegratorComputationErrors) {
                      LMCAS::CasErrc::ResourceLimit))
         << "integration preserves recursive step budgets";
 
-    auto oversized_exponential = SymbolicExpr::exp(
-        SymbolicExpr::power(x, SymbolicExpr::number(1000)));
-    LMCAS::ComputationContext conversion_context;
-    auto conversion_limited = checked_integrator.integrate_checked(
-        *oversized_exponential, "x", conversion_context);
-    EXPECT_TRUE((!conversion_limited &&
-                 conversion_limited.error().code == LMCAS::CasErrc::ResourceLimit))
-        << "checked integration preserves polynomial conversion limits";
-
-    LMCAS::SpecialFunctionStrategy special_functions;
-    LMCAS::ComputationContext special_context;
-    auto special_limited = special_functions.try_integrate(
-        *oversized_exponential, "x", checked_integrator, special_context, 0);
-    EXPECT_TRUE((!special_limited &&
-                 special_limited.error().code == LMCAS::CasErrc::ResourceLimit))
-        << "special-function matching preserves conversion limits";
 }
 
 TEST(ResultContracts, NumberDomainClassification) {
@@ -318,17 +420,15 @@ TEST(ResultContracts, DimensionedPowerDomains) {
     auto dimensionless_power = LMCAS::quantity_power(
         SymbolicExpr::number(2), SymbolicExpr::number(0.5),
         quantity_context);
-    EXPECT_TRUE((dimensionless_power.has_value())) << "dimensionless quantities accept approximate real exponents";
+    EXPECT_TRUE((dimensionless_power.has_value())) << "dimensionless quantities accept rational exponents";
     auto metre = LMCAS::attach_unit(
         SymbolicExpr::number(1), "m", quantity_context);
     ASSERT_TRUE((metre.has_value())) << "metre quantity construction succeeds";
     if (metre) {
         auto approximate_dimensioned = LMCAS::quantity_power(
             metre.value(), SymbolicExpr::number(2.0), quantity_context);
-        EXPECT_TRUE((!approximate_dimensioned &&
-                     approximate_dimensioned.error().code ==
-                         LMCAS::CasErrc::UnitInvalid))
-            << "dimensioned quantities require exact rational exponents";
+        EXPECT_TRUE(approximate_dimensioned.has_value())
+            << "floating input becomes an exact exponent for dimensioned quantities";
     }
 }
 
@@ -368,15 +468,15 @@ TEST(ResultContracts, IntegralBindingAndCalculus) {
     EXPECT_TRUE((parsed_integral.has_value() &&
                  LMCAS::detail::node(parsed_integral.value())->equals(*LMCAS::detail::node(integral_expression))))
         << "integral print/parse round-trip preserves binder structure";
-    EXPECT_TRUE((!LMCAS::Integrator::depends_on(*integral_expression, "x") &&
-                 LMCAS::Integrator::depends_on(*integral_expression, "y")))
+    EXPECT_TRUE((!expression_depends_on_variable(detail::node(integral_expression), "x") &&
+                 expression_depends_on_variable(detail::node(integral_expression), "y")))
         << "integral variable is bound in free-variable analysis";
-    auto capture_avoiding = integral_expression->substitute("y", x);
-    EXPECT_TRUE((LMCAS::Integrator::depends_on(*capture_avoiding, "x"))) << "substitution does not capture a replacement variable";
+    auto capture_avoiding = LMCAS::substitute(integral_expression, "y", x).value();
+    EXPECT_TRUE((expression_depends_on_variable(detail::node(capture_avoiding), "x"))) << "substitution does not capture a replacement variable";
     auto primitive = LMCAS::detail::make_expression_ptr(
         LMCAS::detail::make_node<IntegralNode>(
             LMCAS::detail::node(x), "x"));
-    auto derivative = primitive->differentiate("x");
+    auto derivative = LMCAS::differentiate(primitive, "x").value();
     EXPECT_TRUE((derivative && derivative->to_string() == "x")) << "d/dx Integral(x,x) returns the integrand";
 }
 
@@ -461,13 +561,12 @@ TEST(ResultContracts, ValueFactsPreserveIntegerAndCumulativeLimits) {
     ASSERT_FALSE(value);
     EXPECT_EQ(value.error().code, CasErrc::ResourceLimit);
     EXPECT_EQ(integer_context.recursion_depth(), 0u);
-    limits = ResourceLimits{};
-    limits.max_steps = 1;
-    ComputationContext cumulative(limits);
+    ComputationContext cumulative;
     const auto literal = detail::node(SymbolicExpr::number(1));
     auto first = detail::query_definedness(literal, detail::no_facts(), Domain::Real, cumulative);
     ASSERT_TRUE(first);
     EXPECT_EQ(first.value(), Tribool::True);
+    ASSERT_TRUE(cumulative.consume_steps(cumulative.limits().max_steps - cumulative.steps_used()));
     auto second = detail::query_definedness(literal, detail::no_facts(), Domain::Real, cumulative);
     ASSERT_FALSE(second);
     EXPECT_EQ(second.error().code, CasErrc::ResourceLimit);

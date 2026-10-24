@@ -1,3 +1,4 @@
+#include "expr.hpp"
 // Cross-component regression contracts for previously corrected defects.
 // Each section exercises an observable boundary or invariant.
 
@@ -160,17 +161,16 @@ TEST(CoreRegressions, NumbernodeHashConsistent) {
     auto n_rat = LMCAS::detail::make_node<NumberNode>(Rational(1, 1));
     auto n_dbl = LMCAS::detail::make_node<NumberNode>((lmmc_real_t)1.0);
 
-    // BigInt and Rational are the same exact domain; approximate doubles are distinct.
     EXPECT_TRUE((n_int->compare(*n_rat) == 0)) << "BigInt 1 == Rational 1/1";
-    EXPECT_TRUE((n_int->compare(*n_dbl) != 0)) << "exact BigInt 1 differs structurally from approximate 1.0";
-    EXPECT_TRUE((n_rat->compare(*n_dbl) != 0)) << "exact Rational 1 differs structurally from approximate 1.0";
+    EXPECT_EQ(n_int->compare(*n_dbl), 0);
+    EXPECT_EQ(n_rat->compare(*n_dbl), 0);
 
     // Hash must agree (otherwise equals() short-circuits to false on hash mismatch).
     EXPECT_TRUE((n_int->hash() == n_rat->hash())) << "hash(BigInt 1) == hash(Rational 1/1)";
-    EXPECT_TRUE((n_int->hash() != n_dbl->hash())) << "exact and approximate hashes are domain-separated";
+    EXPECT_EQ(n_int->hash(), n_dbl->hash());
 
     EXPECT_TRUE((n_int->equals(*n_rat))) << "equals(BigInt 1, Rational 1/1)";
-    EXPECT_FALSE((n_int->equals(*n_dbl))) << "exact BigInt does not equal approximate double structurally";
+    EXPECT_TRUE(n_int->equals(*n_dbl));
 }
 
 TEST(CoreRegressions, SymbolicToPolyIntegerExponents) {
@@ -239,7 +239,7 @@ TEST(CoreRegressions, FactorConversionErrorsPropagate) {
     const auto unchanged = unsupported->factor_checked();
     ASSERT_TRUE(unchanged.has_value()) << "unsupported rational coefficients remain a strategy miss";
     const auto actual_expr = unchanged.value();
-    const auto expected_expr = unsupported->simplify();
+    const auto expected_expr = LMCAS::simplify(unsupported).value();
     ASSERT_TRUE(actual_expr);
     ASSERT_TRUE(expected_expr);
     EXPECT_EQ(actual_expr->to_string(), expected_expr->to_string())

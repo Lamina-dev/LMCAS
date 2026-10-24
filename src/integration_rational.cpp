@@ -1,14 +1,13 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_rational_support.hpp"
 
 namespace LMCAS {
 
 namespace {
-void rd_reduce_reciprocal(RationalDecompositionStrategy& strategy,
-    Polynomial<Rational>& P, Polynomial<Rational>& Q) {
+void rd_reduce_reciprocal(Polynomial<Rational>& P, Polynomial<Rational>& Q) {
     if (!P.is_zero() && P.degree() > 0 && P.degree() < Q.degree()) {
-        Polynomial<Rational> reduced_denominator;
-        Polynomial<Rational> remainder;
-        strategy.poly_divide(Q, P, reduced_denominator, remainder);
+        auto [reduced_denominator, remainder] = Q.div_mod(P);
         if (remainder.is_zero()) {
             P = Polynomial<Rational>(
                 std::vector<Rational>{Rational(1)}, P.variable_name);
@@ -39,108 +38,106 @@ std::shared_ptr<SymbolicExpr> rd_integrate_polynomial(
     return result;
 }
 
-std::shared_ptr<SymbolicExpr> rd_add_fraction_primitives(
-    RationalDecompositionStrategy& strategy, const SymbolicExpr& expr, const std::string& var,
+detail::IntegralParts rd_add_fraction_primitives(
+    const std::string& var,
     const std::vector<std::pair<Polynomial<Rational>, int>>& factors,
     const std::vector<Polynomial<Rational>>& numerators,
-    std::shared_ptr<SymbolicExpr> result) {
-        if (!numerators.empty()) {
-            size_t idx = 0;
-            for (size_t i = 0; i < factors.size(); ++i) {
-                const auto& [fpoly, mult] = factors[i];
-                for (int l = 1; l <= mult; ++l, ++idx) {
-                    if (idx >= numerators.size()) { break; }
-                    auto term = strategy.integrate_term(numerators[idx], fpoly, l, var);
-                    if (!term) {
-                        return LMCAS::detail::make_expression_ptr(
-                            LMCAS::detail::make_node<IntegralNode>(
-                                LMCAS::detail::node(expr), var));
-                    }
-                    result = SymbolicExpr::add(result, term);
-                }
-            }
+    detail::IntegralParts result, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes, "transform");
+    size_t idx = 0;
+    for (const auto& [factor, mult] : factors) {
+        for (int power = 1; power <= mult; ++power, ++idx) {
+            auto term = detail::integrate_rational_term(numerators[idx], factor, power, var);
+            result.primitive = *SymbolicExpr::add(
+                detail::make_expression_ptr(result.primitive),
+                detail::make_expression_ptr(term.primitive));
+            result.remainder = *SymbolicExpr::add(
+                detail::make_expression_ptr(result.remainder),
+                detail::make_expression_ptr(term.remainder));
         }
-        auto simplified = result->simplify();
-        if (simplified) {
-            return simplified;
-        }
-        return result;
+    }
+    result.primitive = detail::expression_from_node(
+        detail::normalize_node(detail::node(result.primitive), transform_budget));
+    result.remainder = detail::expression_from_node(
+        detail::normalize_node(detail::node(result.remainder), transform_budget));
+    return result;
 }
 
-Result<std::shared_ptr<SymbolicExpr>> rd_integrate_proper_fraction(
-    RationalDecompositionStrategy& strategy, const SymbolicExpr& expr, const std::string& var,
+Result<detail::IntegralParts> rd_integrate_proper_fraction(
+    const std::string& var,
     const Polynomial<Rational>& P, const Polynomial<Rational>& Q,
-    ComputationContext& computation) {
-        Polynomial<Rational> quot, rem;
-        if (P.degree() >= Q.degree()) {
-            strategy.poly_divide(P, Q, quot, rem);
-        } else {
-            quot = Polynomial<Rational>(Q.variable_name);
-            rem = P;
-        }
+    const SymbolicExpr& zero, ComputationContext& computation) {
+    Polynomial<Rational> quot(Q.variable_name), rem = P;
+    if (P.degree() >= Q.degree()) {
+        auto divided = P.div_mod(Q);
+        quot = std::move(divided.first);
+        rem = std::move(divided.second);
+    }
 
-        std::vector<std::pair<Polynomial<Rational>, int>> factors;
-        if (!strategy.factor_denominator(Q, factors)) {
-            /// Q 上因式分解未决时保留未求值积分节点.
-            return Integrator::depends_on(expr, var)
-                ? LMCAS::detail::make_expression_ptr(
-                      LMCAS::detail::make_node<IntegralNode>(
-                          LMCAS::detail::node(expr), var))
-                : nullptr;
-        }
-        if (factors.empty() && quot.is_zero()) {
-            return SymbolicExpr::number(0);
-        }
+    detail::IntegralParts result{*rd_integrate_polynomial(quot, var), zero};
+    if (rem.is_zero()) { return result; }
 
-        std::vector<Polynomial<Rational>> numerators;
-        if (!rem.is_zero()) {
-            auto coefficients = strategy.solve_coefficients(
-                rem, Q, factors, numerators, computation);
-            if (!coefficients) {
-                return Result<std::shared_ptr<SymbolicExpr>>::failure(
-                    coefficients.error());
-            }
-            if (!coefficients.value()) {
-                return LMCAS::detail::make_expression_ptr(
-                    LMCAS::detail::make_node<IntegralNode>(
-                        LMCAS::detail::node(expr), var));
-            }
-        }
-    auto result = rd_integrate_polynomial(quot, var);
-    return rd_add_fraction_primitives(strategy, expr, var, factors, numerators, result);
+    std::vector<std::pair<Polynomial<Rational>, int>> factors;
+    if (!detail::factor_denominator(Q, factors)) {
+        result.remainder = *SymbolicExpr::divide(poly_to_symbolic(rem), poly_to_symbolic(Q));
+        return result;
+    }
+
+    std::vector<Polynomial<Rational>> numerators;
+    auto coefficients = detail::solve_coefficients(rem, Q, factors, numerators, computation);
+    if (!coefficients) {
+        return Result<detail::IntegralParts>::failure(coefficients.error());
+    }
+    if (!coefficients.value()) {
+        result.remainder = *SymbolicExpr::divide(poly_to_symbolic(rem), poly_to_symbolic(Q));
+        return result;
+    }
+    return rd_add_fraction_primitives(var, factors, numerators, std::move(result), computation);
 }
 }
 
-Result<std::shared_ptr<SymbolicExpr>> RationalDecompositionStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
-    (void)ctx;
+Result<std::optional<detail::IntegralParts>> Integrator::try_rational_decomposition(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& computation, int depth) try {
+    detail::RewriteBudget transform_budget(computation, computation.limits().max_recursion_depth,
+                                            computation.limits().max_ast_nodes, "transform");
     (void)depth;
 
     Polynomial<Rational> P, Q;
-    auto extracted = extract_rational(expr, var, P, Q);
+    auto extracted = detail::extract_rational(expr, var, P, Q);
     if (!extracted) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(extracted.error());
+        return Result<std::optional<detail::IntegralParts>>::failure(extracted.error());
     }
-    if (!extracted.value()) { return nullptr; }
-    rd_reduce_reciprocal(*this, P, Q);
-    if (Q.is_zero() || Q.degree() < 1) { return nullptr; }
+    if (!extracted.value()) { return std::optional<detail::IntegralParts>{}; }
+    rd_reduce_reciprocal(P, Q);
+    if (Q.is_zero() || Q.degree() < 1) { return std::optional<detail::IntegralParts>{}; }
 
-    /**
-     * @brief 常数分子与一次分母直接积分，其余情形分解后逐项积分。
-     * @note 不可约二次因子的原函数可含 arctan 与 ln。
-     */
     if (Q.degree() == 1 && P.degree() <= 0 &&
         !P.coeffs.empty() && Q.coeffs.size() > 1 &&
         Q.coeffs[1] != Rational(0)) {
-        auto coefficient = SymbolicExpr::number(
-            P.coeffs[0] / Q.coeffs[1]);
+        auto coefficient = SymbolicExpr::number(P.coeffs[0] / Q.coeffs[1]);
         auto logarithm = SymbolicExpr::ln(poly_to_symbolic(Q));
-        return SymbolicExpr::multiply(
-            coefficient, logarithm)->simplify();
+        auto primitive = detail::expression_from_node(detail::normalize_node(
+            detail::node(SymbolicExpr::multiply(coefficient, logarithm)), transform_budget));
+        return std::optional<detail::IntegralParts>{{std::move(primitive), zero_}};
     }
-    if (Q.degree() < 2) { return nullptr; }
-    return rd_integrate_proper_fraction(*this, expr, var, P, Q, computation);
+    auto integrated = rd_integrate_proper_fraction(var, P, Q, zero_, computation);
+    if (!integrated) {
+        return Result<std::optional<detail::IntegralParts>>::failure(integrated.error());
+    }
+    return std::optional<detail::IntegralParts>{std::move(integrated.value())};
+} catch (const CasError& error) {
+    return Result<std::optional<detail::IntegralParts>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::optional<detail::IntegralParts>>::failure(
+        CasErrc::ResourceLimit, "allocation failed", "integrate.rational");
+} catch (const std::length_error& error) {
+    return Result<std::optional<detail::IntegralParts>>::failure(
+        CasErrc::ResourceLimit, error.what(), "integrate.rational");
+} catch (const std::exception& error) {
+    return Result<std::optional<detail::IntegralParts>>::failure(
+        CasErrc::InternalInvariant, error.what(), "integrate.rational");
 }
 
 }

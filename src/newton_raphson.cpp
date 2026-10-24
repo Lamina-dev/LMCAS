@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "newton_raphson.hpp"
 
 #include "internal/exact_sturm.hpp"
@@ -240,9 +242,11 @@ std::optional<CasError> append_verified_root(
 NumericRootsResult solve_isolated_polynomial(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
     const Polynomial<Rational>& polynomial, ComputationContext& context,
-    const SolveOptions& opts) {
+    const SolveOptions& opts) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<NumericRoot> results;
-    auto derivative = expr->differentiate(var);
+    auto derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(expr), var, transform_budget));
     auto isolated = isolate_real_roots_checked(polynomial, context);
     if (!isolated) {
         return NumericRootsResult::failure(isolated.error());
@@ -268,14 +272,24 @@ NumericRootsResult solve_isolated_polynomial(
         }
     }
     return NumericRootsResult::success(std::move(results));
+} catch (const CasError& error) {
+    return NumericRootsResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return NumericRootsResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_isolated_polynomial");
+} catch (const std::length_error& error) {
+    return NumericRootsResult::failure(CasErrc::ResourceLimit, error.what(), "solve_isolated_polynomial");
+} catch (const std::exception& error) {
+    return NumericRootsResult::failure(CasErrc::InternalInvariant, error.what(), "solve_isolated_polynomial");
 }
 
 NumericRootsResult solve_initial_guess(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
-    ComputationContext& context, const SolveOptions& opts) {
+    ComputationContext& context, const SolveOptions& opts) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<NumericRoot> results;
     const lmmc_real_t initial = opts.has_initial_guess ? opts.initial_guess : 0.0;
-    auto derivative = expr->differentiate(var);
+    auto derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(expr), var, transform_budget));
     auto candidate = newton_raphson_checked(expr, derivative, var, initial, context, opts);
     auto failure = append_verified_root(
         results, candidate, expr, var, context, opts.tolerance);
@@ -283,6 +297,14 @@ NumericRootsResult solve_initial_guess(
         return NumericRootsResult::failure(std::move(*failure));
     }
     return NumericRootsResult::success(std::move(results));
+} catch (const CasError& error) {
+    return NumericRootsResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return NumericRootsResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_initial_guess");
+} catch (const std::length_error& error) {
+    return NumericRootsResult::failure(CasErrc::ResourceLimit, error.what(), "solve_initial_guess");
+} catch (const std::exception& error) {
+    return NumericRootsResult::failure(CasErrc::InternalInvariant, error.what(), "solve_initial_guess");
 }
 
 } // namespace

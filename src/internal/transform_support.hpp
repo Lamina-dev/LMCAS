@@ -22,7 +22,7 @@ std::shared_ptr<SymbolicExpr> te_gt_condition(
     const std::shared_ptr<SymbolicExpr>& lhs,
     const std::shared_ptr<SymbolicExpr>& rhs);
 bool te_is_zero(const std::shared_ptr<SymbolicExpr>& expression);
-std::optional<double> te_number_value(
+std::optional<Rational> te_number_value(
     const std::shared_ptr<const SymbolicNode>& node);
 BigInt te_factorial(const BigInt& n, ComputationContext& context);
 std::pair<std::shared_ptr<SymbolicExpr>, std::shared_ptr<SymbolicExpr>> te_split_coeff(
@@ -35,10 +35,10 @@ bool te_is_trig(const std::shared_ptr<SymbolicExpr>& expression,
 
 struct GaussianMatch {
     std::shared_ptr<SymbolicExpr> coefficient;
-    double rate;
+    Rational rate;
 };
 
-std::optional<double> te_match_pure_gaussian(
+std::optional<Rational> te_match_pure_gaussian(
     const std::shared_ptr<SymbolicExpr>& expression,
     const std::string& variable);
 std::optional<GaussianMatch> te_match_scaled_gaussian(

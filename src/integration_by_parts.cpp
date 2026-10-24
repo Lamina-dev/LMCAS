@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
 namespace LMCAS {
@@ -14,14 +15,19 @@ int integration_by_parts_score(
         }
         if (!depends_on_integration_variable(e, var)) { return 10; }
         if (std::dynamic_pointer_cast<const VariableNode>(node)) { return 3; }
-        if (std::dynamic_pointer_cast<const PowerNode>(node)) { return 3; }
+        if (const auto* power = dynamic_cast<const PowerNode*>(node.get())) {
+            const auto exponent = detail::exact_rational_value(power->exponent());
+            const auto* base = dynamic_cast<const VariableNode*>(power->base().get());
+            if (base && base->name() == var && exponent &&
+                exponent->is_integer() && *exponent > Rational(0)) { return 3; }
+        }
         return 10;
 }
 
 int integration_by_parts_choice(
     const std::vector<std::shared_ptr<const SymbolicNode>>& ops, const std::string& var) {
     int best_u_idx = -1;
-    int best_score = 100;
+    int best_score = 10;
     if (ops.size() == 1) {
         int s = integration_by_parts_score(ops[0], var);
         if (s <= 2) best_u_idx = 0;
@@ -36,11 +42,6 @@ int integration_by_parts_choice(
         }
     }
     return best_u_idx;
-}
-
-bool integration_primitive_complete(const std::shared_ptr<SymbolicExpr>& primitive) {
-    return primitive && detail::node(primitive) &&
-        !contains_unevaluated_integral(detail::node(primitive));
 }
 
 std::shared_ptr<SymbolicExpr> integration_differential_factor(
@@ -61,9 +62,11 @@ std::shared_ptr<SymbolicExpr> integration_differential_factor(
 }
 }
 
-Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
+Result<std::optional<detail::IntegralParts>> Integrator::try_integration_by_parts(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& computation, int depth) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
 
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
@@ -72,38 +75,52 @@ Result<std::shared_ptr<SymbolicExpr>> IBPStrategy::try_integrate_raw(
         ops.push_back(LMCAS::detail::node(expr));
     }
     int best_u_idx = integration_by_parts_choice(ops, var);
-    if (best_u_idx == -1) { return nullptr; }
+    if (best_u_idx == -1) { return std::optional<detail::IntegralParts>{}; }
+    if (integration_by_parts_score(ops[best_u_idx], var) >= 4) {
+        for (std::size_t i = 0; i < ops.size(); ++i) {
+            if (i == static_cast<std::size_t>(best_u_idx) ||
+                !expression_depends_on_variable(ops[i], var)) { continue; }
+            const auto* function = dynamic_cast<const FunctionNode*>(ops[i].get());
+            if (!function || (function->type() != FunctionNode::FuncType::Sin &&
+                function->type() != FunctionNode::FuncType::Cos &&
+                function->type() != FunctionNode::FuncType::Exp)) {
+                return std::optional<detail::IntegralParts>{};
+            }
+        }
+    }
 
     auto u = LMCAS::detail::expression_from_node(ops[best_u_idx]);
     auto dv = integration_differential_factor(ops, best_u_idx);
 
-    auto integrated_v =
-        ctx.integrate_recursive(*dv, var, computation, depth + 1);
-    if (!integrated_v) { return integrated_v; }
-    auto v = std::move(integrated_v.value());
-    if (!integration_primitive_complete(v)) {
-        return nullptr;
+    auto integrated_v = integrate_recursive(*dv, var, computation, depth + 1);
+    if (!integrated_v) {
+        return Result<std::optional<detail::IntegralParts>>::failure(integrated_v.error());
     }
+    if (!detail::node(integrated_v.value().remainder)->is_zero()) {
+        return std::optional<detail::IntegralParts>{};
+    }
+    auto v = detail::make_expression_ptr(std::move(integrated_v.value().primitive));
 
-    auto du_ptr = u.differentiate(var);
-    if (!du_ptr) { return nullptr; }
-    auto simplified_du = du_ptr->simplify();
-    if (!simplified_du || !LMCAS::detail::node(simplified_du)) { return nullptr; }
-    auto du = detail::make_expression_ptr(*simplified_du);
+    auto du = detail::make_expression_ptr(detail::normalize_node(
+        detail::differentiate_node(detail::node(u), var, transform_budget), transform_budget));
 
     auto uv = SymbolicExpr::multiply(detail::make_expression_ptr(u), v);
     auto vdu = SymbolicExpr::multiply(v, du);
-    if (!uv || !vdu) { return nullptr; }
-    vdu = vdu->cancel()->simplify();
-    auto integrated_vdu =
-        ctx.integrate_recursive(*vdu, var, computation, depth + 1);
-    if (!integrated_vdu) { return integrated_vdu; }
-    auto int_vdu = std::move(integrated_vdu.value());
-    if (!integration_primitive_complete(int_vdu)) {
-        return nullptr;
+    vdu = detail::make_expression_ptr(detail::normalize_node(detail::node(vdu->cancel()), transform_budget));
+    auto integrated_vdu = integrate_recursive(*vdu, var, computation, depth + 1);
+    if (!integrated_vdu) {
+        return Result<std::optional<detail::IntegralParts>>::failure(integrated_vdu.error());
     }
-
-    return sym_sub(*uv, *int_vdu);
+    auto parts = std::move(integrated_vdu.value());
+    auto primitive = detail::expression_from_node(detail::normalize_node(
+        detail::node(sym_sub(*uv, parts.primitive)), transform_budget));
+    auto remainder = detail::expression_from_node(detail::normalize_node(
+        detail::node(SymbolicExpr::multiply(
+            SymbolicExpr::number(-1), detail::make_expression_ptr(parts.remainder))),
+        transform_budget));
+    return std::optional<detail::IntegralParts>{{std::move(primitive), std::move(remainder)}};
+} catch (const CasError& error) {
+    return Result<std::optional<detail::IntegralParts>>::failure(error);
 }
 
 }

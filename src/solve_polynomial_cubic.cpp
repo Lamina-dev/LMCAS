@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/polynomial_solver_support.hpp"
 #include "root_of_identity.hpp"
 #include "rational_polynomial.hpp"
@@ -16,14 +17,16 @@ static std::shared_ptr<SymbolicExpr> cbrt_expr(const std::shared_ptr<SymbolicExp
 
 static std::vector<std::shared_ptr<SymbolicExpr>> solve_degenerate_cubic(
     const std::shared_ptr<SymbolicExpr>& b, const std::shared_ptr<SymbolicExpr>& c,
-    const std::shared_ptr<SymbolicExpr>& d) {
-    if (!b->simplify()->get_number_value_is_zero()) {
-        return solve_quadratic_internal(b, c, d);
+    const std::shared_ptr<SymbolicExpr>& d, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    if (!detail::make_expression_ptr(detail::normalize_node(detail::node(b), transform_budget))->get_number_value_is_zero()) {
+        return solve_quadratic_internal(b, c, d, context);
     }
-    if (!c->simplify()->get_number_value_is_zero()) {
-        return {SymbolicExpr::divide(negate(d), c)->simplify()};
+    if (!detail::make_expression_ptr(detail::normalize_node(detail::node(c), transform_budget))->get_number_value_is_zero()) {
+        return {detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(negate(d), c)), transform_budget))};
     }
-    auto constant = d->simplify();
+    auto constant = detail::make_expression_ptr(detail::normalize_node(detail::node(d), transform_budget));
     if (constant->get_number_value_is_zero()) {
         throw std::invalid_argument(
             "solve_cubic: identically zero equation has no finite root list");
@@ -35,7 +38,10 @@ static std::vector<std::shared_ptr<SymbolicExpr>> solve_degenerate_cubic(
 
 static std::vector<std::shared_ptr<SymbolicExpr>> symbolic_cubic_roots(
     const std::shared_ptr<SymbolicExpr>& a, const std::shared_ptr<SymbolicExpr>& b,
-    const std::shared_ptr<SymbolicExpr>& c, const std::shared_ptr<SymbolicExpr>& d) {
+    const std::shared_ptr<SymbolicExpr>& c, const std::shared_ptr<SymbolicExpr>& d, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto a2 = SymbolicExpr::power(a, num(2));
     auto a3 = SymbolicExpr::power(a, num(3));
     auto b2 = SymbolicExpr::power(b, num(2));
@@ -44,7 +50,7 @@ static std::vector<std::shared_ptr<SymbolicExpr>> symbolic_cubic_roots(
         num(3), SymbolicExpr::multiply(a, c));
     auto p_num = sub(three_ac, b2);
     auto p_den = SymbolicExpr::multiply(num(3), a2);
-    auto p = SymbolicExpr::divide(p_num, p_den)->simplify();
+    auto p = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(p_num, p_den)), transform_budget));
     auto two_b3 = SymbolicExpr::multiply(num(2), b3);
     auto nine_abc = SymbolicExpr::multiply(
         num(9), SymbolicExpr::multiply(
@@ -54,25 +60,25 @@ static std::vector<std::shared_ptr<SymbolicExpr>> symbolic_cubic_roots(
     auto q_num = SymbolicExpr::add(
         sub(two_b3, nine_abc), twentyseven_a2d);
     auto q_den = SymbolicExpr::multiply(num(27), a3);
-    auto q = SymbolicExpr::divide(q_num, q_den)->simplify();
-    auto shift = SymbolicExpr::divide(
-        b, SymbolicExpr::multiply(num(3), a))->simplify();
+    auto q = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(q_num, q_den)), transform_budget));
+    auto shift = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+        b, SymbolicExpr::multiply(num(3), a))), transform_budget));
 
 
     auto q_half = SymbolicExpr::divide(q, num(2));
     auto p_third = SymbolicExpr::divide(p, num(3));
-    auto D_expr = SymbolicExpr::add(
+    auto D_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
         SymbolicExpr::power(q_half, num(2)),
-        SymbolicExpr::power(p_third, num(3)))->simplify();
+        SymbolicExpr::power(p_third, num(3)))), transform_budget));
 
-    auto neg_q_half = negate(q_half)->simplify();
+    auto neg_q_half = detail::make_expression_ptr(detail::normalize_node(detail::node(negate(q_half)), transform_budget));
     auto sqrt_D = SymbolicExpr::sqrt(D_expr);
 
-    auto u = cbrt_expr(SymbolicExpr::add(neg_q_half, sqrt_D))->simplify();
-    auto v = cbrt_expr(sub(neg_q_half, sqrt_D))->simplify();
+    auto u = detail::make_expression_ptr(detail::normalize_node(detail::node(cbrt_expr(SymbolicExpr::add(neg_q_half, sqrt_D))), transform_budget));
+    auto v = detail::make_expression_ptr(detail::normalize_node(detail::node(cbrt_expr(sub(neg_q_half, sqrt_D))), transform_budget));
 
     auto t1 = SymbolicExpr::add(u, v);
-    auto x1 = sub(t1, shift)->simplify();
+    auto x1 = detail::make_expression_ptr(detail::normalize_node(detail::node(sub(t1, shift)), transform_budget));
 
     auto neg_half_sum = SymbolicExpr::divide(negate(SymbolicExpr::add(u, v)), num(2));
     auto diff_uv = sub(u, v);
@@ -80,8 +86,8 @@ static std::vector<std::shared_ptr<SymbolicExpr>> symbolic_cubic_roots(
     auto imag_coeff = SymbolicExpr::multiply(sqrt3_half, diff_uv);
 
     auto i_unit = SymbolicExpr::sqrt(num(-1));
-    auto x2 = sub(SymbolicExpr::add(neg_half_sum, SymbolicExpr::multiply(i_unit, imag_coeff)), shift)->simplify();
-    auto x3 = sub(sub(neg_half_sum, SymbolicExpr::multiply(i_unit, imag_coeff)), shift)->simplify();
+    auto x2 = detail::make_expression_ptr(detail::normalize_node(detail::node(sub(SymbolicExpr::add(neg_half_sum, SymbolicExpr::multiply(i_unit, imag_coeff)), shift)), transform_budget));
+    auto x3 = detail::make_expression_ptr(detail::normalize_node(detail::node(sub(sub(neg_half_sum, SymbolicExpr::multiply(i_unit, imag_coeff)), shift)), transform_budget));
 
     return {x1, x2, x3};
 }
@@ -113,20 +119,21 @@ bool polynomial_solver_detail::bounded_rational_root_search(
 }
 
 static std::vector<std::shared_ptr<SymbolicExpr>> exact_factor_roots(
-    Polynomial<Rational> polynomial) {
+    Polynomial<Rational> polynomial, ComputationContext& context) {
+
     std::vector<std::shared_ptr<SymbolicExpr>> roots;
-    if (polynomial.degree() == 3 && polynomial.coeffs[0] == Rational(0)) {
+    while (polynomial.degree() >= 3 && polynomial.coeffs[0] == Rational(0)) {
         roots.push_back(SymbolicExpr::number(0));
         polynomial.coeffs.erase(polynomial.coeffs.begin());
     }
-    if (polynomial.degree() == 3) {
+    if (polynomial.degree() >= 3) {
         if (bounded_rational_root_search(polynomial)) {
             for (const auto& root : find_rational_roots(polynomial)) {
                 Polynomial<Rational> linear(
                     {-root, Rational(1)}, polynomial.variable_name);
                 auto [quotient, remainder] = polynomial.div_mod(linear);
                 if (!remainder.is_zero()) {
-                    throw std::logic_error("solve_cubic: inexact rational root division");
+                    throw std::logic_error("polynomial solver: inexact rational root division");
                 }
                 roots.push_back(SymbolicExpr::number(root));
                 polynomial = std::move(quotient);
@@ -137,42 +144,68 @@ static std::vector<std::shared_ptr<SymbolicExpr>> exact_factor_roots(
         roots.push_back(SymbolicExpr::number(
             -polynomial.coeffs[0] / polynomial.coeffs[1]));
     } else if (polynomial.degree() == 2) {
-        const auto& a = polynomial.coeffs[2];
-        const auto& b = polynomial.coeffs[1];
-        const auto& c = polynomial.coeffs[0];
-        auto radical = SymbolicExpr::sqrt(
-            SymbolicExpr::number(b * b - Rational(4) * a * c));
-        auto negative_b = SymbolicExpr::number(-b);
-        auto denominator = SymbolicExpr::number(Rational(2) * a);
-        roots.push_back(SymbolicExpr::divide(
-            SymbolicExpr::add(negative_b, radical), denominator)->simplify());
-        roots.push_back(SymbolicExpr::divide(
-            sub(negative_b, radical), denominator)->simplify());
-    } else if (polynomial.degree() == 3) {
+        auto quadratic = solve_quadratic_internal(
+            SymbolicExpr::number(polynomial.coeffs[2]),
+            SymbolicExpr::number(polynomial.coeffs[1]),
+            SymbolicExpr::number(polynomial.coeffs[0]), context);
+        roots.insert(roots.end(), quadratic.begin(), quadratic.end());
+    } else if (polynomial.degree() == 4 &&
+               polynomial.coeffs[3] == Rational(0) &&
+               polynomial.coeffs[1] == Rational(0)) {
+        auto biquadratic = solve_biquadratic_impl(
+            SymbolicExpr::number(polynomial.coeffs[4]),
+            SymbolicExpr::number(polynomial.coeffs[2]),
+            SymbolicExpr::number(polynomial.coeffs[0]),
+            polynomial.variable_name, context);
+        roots.insert(roots.end(), biquadratic.begin(), biquadratic.end());
+    } else if (polynomial.degree() >= 3) {
         auto expression = poly_to_symbolic(polynomial);
         for (int index = 0; index < polynomial.degree(); ++index) {
-            roots.push_back(SymbolicExpr::root_of(
-                expression, polynomial.variable_name, index));
+            auto root = make_rootof_checked(expression, polynomial.variable_name,
+                static_cast<std::size_t>(index), context);
+            if (!root) throw root.error();
+            roots.push_back(std::move(root.value()));
         }
     }
     return roots;
 }
 
-static std::vector<std::shared_ptr<SymbolicExpr>> exact_cubic_roots(
-    const Polynomial<Rational>& polynomial) {
+std::vector<std::shared_ptr<SymbolicExpr>> polynomial_solver_detail::exact_polynomial_roots(
+    const Polynomial<Rational>& polynomial, ComputationContext& context) {
     if (polynomial.is_zero()) {
         throw std::invalid_argument(
-            "solve_cubic: identically zero equation has no finite root list");
+            "polynomial solver: identically zero equation has no finite root list");
     }
     std::vector<std::shared_ptr<SymbolicExpr>> roots;
     for (const auto& [factor, multiplicity] :
          square_free_factorization(polynomial)) {
-        auto factor_roots = exact_factor_roots(factor);
+        auto factor_roots = exact_factor_roots(factor, context);
         for (int repeat = 0; repeat < multiplicity; ++repeat) {
             roots.insert(roots.end(), factor_roots.begin(), factor_roots.end());
         }
     }
     return roots;
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> polynomial_solver_detail::solve_cubic_impl(
+    const std::shared_ptr<SymbolicExpr>& a,
+    const std::shared_ptr<SymbolicExpr>& b,
+    const std::shared_ptr<SymbolicExpr>& c,
+    const std::shared_ptr<SymbolicExpr>& d,
+    const std::string& variable, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    Polynomial<SymbolicPolyCoeff> symbolic(
+        {SymbolicPolyCoeff(d), SymbolicPolyCoeff(c),
+         SymbolicPolyCoeff(b), SymbolicPolyCoeff(a)}, variable);
+    Polynomial<Rational> exact;
+    if (convert_to_rational_poly(symbolic, exact, context)) {
+        return exact_polynomial_roots(exact, context);
+    }
+    if (detail::make_expression_ptr(detail::normalize_node(detail::node(a), transform_budget))->get_number_value_is_zero()) {
+        return solve_degenerate_cubic(b, c, d, context);
+    }
+    return symbolic_cubic_roots(a, b, c, d, context);
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
@@ -181,19 +214,8 @@ std::vector<std::shared_ptr<SymbolicExpr>> solve_cubic(
     const std::shared_ptr<SymbolicExpr>& c,
     const std::shared_ptr<SymbolicExpr>& d,
     const std::string& variable) {
-    Polynomial<SymbolicPolyCoeff> symbolic(
-        {SymbolicPolyCoeff(d), SymbolicPolyCoeff(c),
-         SymbolicPolyCoeff(b), SymbolicPolyCoeff(a)}, variable);
-    Polynomial<Rational> exact;
-    if (convert_to_rational_poly(symbolic, exact)) {
-        return exact_cubic_roots(exact);
-    }
-    if (a->simplify()->get_number_value_is_zero()) {
-        return solve_degenerate_cubic(b, c, d);
-    }
-    auto depression = numeric_cubic_depression(a, b, c, d);
-    if (depression) return numeric_cubic_roots(*depression);
-    return symbolic_cubic_roots(a, b, c, d);
+    ComputationContext context;
+    return solve_cubic_impl(a, b, c, d, variable, context);
 }
 
 }

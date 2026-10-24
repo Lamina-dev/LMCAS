@@ -12,9 +12,6 @@ static lmmc_real_t extract_real_value(const std::shared_ptr<const SymbolicNode>&
         return std::numeric_limits<lmmc_real_t>::quiet_NaN();
     }
 
-    if (std::holds_alternative<lmmc_real_t>(num->value())) {
-        return std::get<lmmc_real_t>(num->value());
-    }
     if (std::holds_alternative<Rational>(num->value())) {
         return static_cast<lmmc_real_t>(std::get<Rational>(num->value()).to_double());
     }

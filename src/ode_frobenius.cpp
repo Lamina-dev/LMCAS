@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 /**
  * @file ode_frobenius.cpp
@@ -47,7 +49,10 @@ static Result<OdeTaylorCoefficients> ordinary_taylor_coefficients(
     const std::shared_ptr<SymbolicExpr>& p,
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
-    const std::string& x, int order) {
+    const std::string& x, int order, ComputationContext& context) try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         std::vector<double> p_coeffs(order + 2, 0.0);
         std::vector<double> q_coeffs(order + 2, 0.0);
 
@@ -58,8 +63,8 @@ static Result<OdeTaylorCoefficients> ordinary_taylor_coefficients(
             if (k > 0) {
                 factorial *= k;
             }
-            auto p_val_expr = p_current->substitute(x, x0)->simplify();
-            auto q_val_expr = q_current->substitute(x, x0)->simplify();
+            auto p_val_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(p_current), x, detail::node(x0), transform_budget));
+            auto q_val_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(q_current), x, detail::node(x0), transform_budget));
             double pv = try_eval_double(p_val_expr);
             double qv = try_eval_double(q_val_expr);
             if (!std::isfinite(pv) || !std::isfinite(qv)) {
@@ -67,8 +72,8 @@ static Result<OdeTaylorCoefficients> ordinary_taylor_coefficients(
             }
             p_coeffs[k] = pv / factorial;
             q_coeffs[k] = qv / factorial;
-            p_current = p_current->differentiate(x);
-            q_current = q_current->differentiate(x);
+            p_current = detail::make_expression_ptr(detail::differentiate_node(detail::node(p_current), x, transform_budget));
+            q_current = detail::make_expression_ptr(detail::differentiate_node(detail::node(q_current), x, transform_budget));
             if (!p_current) {
                 p_current = SymbolicExpr::number(0);
             }
@@ -78,6 +83,14 @@ static Result<OdeTaylorCoefficients> ordinary_taylor_coefficients(
         }
 
     return OdeTaylorCoefficients{std::move(p_coeffs), std::move(q_coeffs)};
+} catch (const CasError& error) {
+    return Result<OdeTaylorCoefficients>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::ResourceLimit, "allocation failed", "ordinary_taylor_coefficients");
+} catch (const std::length_error& error) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::ResourceLimit, error.what(), "ordinary_taylor_coefficients");
+} catch (const std::exception& error) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::InternalInvariant, error.what(), "ordinary_taylor_coefficients");
 }
 
 static Result<std::vector<double>> ordinary_series_recurrence(
@@ -172,7 +185,9 @@ static Result<OdeTaylorCoefficients> singular_taylor_coefficients(
     const std::shared_ptr<SymbolicExpr>& x2q_expr,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x, int order, double P0, double Q0,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<double> pn_coeffs(order + 1, 0.0);
     std::vector<double> qn_coeffs(order + 1, 0.0);
 
@@ -188,8 +203,8 @@ static Result<OdeTaylorCoefficients> singular_taylor_coefficients(
             pv = P0;
             qv = Q0;
         } else {
-            auto pv_expr = xp_current->substitute(x, x0)->simplify();
-            auto qv_expr = x2q_current->substitute(x, x0)->simplify();
+            auto pv_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(xp_current), x, detail::node(x0), transform_budget));
+            auto qv_expr = detail::make_expression_ptr(detail::substitute_node(detail::node(x2q_current), x, detail::node(x0), transform_budget));
             pv = try_eval_double(pv_expr);
             qv = try_eval_double(qv_expr);
 
@@ -210,8 +225,8 @@ static Result<OdeTaylorCoefficients> singular_taylor_coefficients(
         pn_coeffs[k] = pv / fact;
         qn_coeffs[k] = qv / fact;
 
-        xp_current = xp_current->differentiate(x);
-        x2q_current = x2q_current->differentiate(x);
+        xp_current = detail::make_expression_ptr(detail::differentiate_node(detail::node(xp_current), x, transform_budget));
+        x2q_current = detail::make_expression_ptr(detail::differentiate_node(detail::node(x2q_current), x, transform_budget));
         if (!xp_current) {
             xp_current = SymbolicExpr::number(0);
         }
@@ -221,6 +236,14 @@ static Result<OdeTaylorCoefficients> singular_taylor_coefficients(
     }
 
     return OdeTaylorCoefficients{std::move(pn_coeffs), std::move(qn_coeffs)};
+} catch (const CasError& error) {
+    return Result<OdeTaylorCoefficients>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::ResourceLimit, "allocation failed", "singular_taylor_coefficients");
+} catch (const std::length_error& error) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::ResourceLimit, error.what(), "singular_taylor_coefficients");
+} catch (const std::exception& error) {
+    return Result<OdeTaylorCoefficients>::failure(CasErrc::InternalInvariant, error.what(), "singular_taylor_coefficients");
 }
 
 static Result<std::vector<double>> singular_series_recurrence(
@@ -272,8 +295,11 @@ static FrobeniusSolutionResult ordinary_frobenius_solution(
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x, const std::shared_ptr<SymbolicExpr>& x_minus_x0,
-    FrobeniusSolution result) {
-    auto coefficients = ordinary_taylor_coefficients(p, q, x0, x, result.truncation_order);
+    FrobeniusSolution result, ComputationContext& context) try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto coefficients = ordinary_taylor_coefficients(p, q, x0, x, result.truncation_order, context);
     if (!coefficients) {
         return FrobeniusSolutionResult::failure(coefficients.error());
     }
@@ -281,10 +307,18 @@ static FrobeniusSolutionResult ordinary_frobenius_solution(
     if (!recurrence) {
         return FrobeniusSolutionResult::failure(recurrence.error());
     }
-    result.series_solution = assemble_frobenius_polynomial(
-        recurrence.value(), x_minus_x0)->simplify();
+    result.series_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(assemble_frobenius_polynomial(
+        recurrence.value(), x_minus_x0)), transform_budget));
     result.indicial_roots = {0.0};
     return result;
+} catch (const CasError& error) {
+    return FrobeniusSolutionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return FrobeniusSolutionResult::failure(CasErrc::ResourceLimit, "allocation failed", "ordinary_frobenius_solution");
+} catch (const std::length_error& error) {
+    return FrobeniusSolutionResult::failure(CasErrc::ResourceLimit, error.what(), "ordinary_frobenius_solution");
+} catch (const std::exception& error) {
+    return FrobeniusSolutionResult::failure(CasErrc::InternalInvariant, error.what(), "ordinary_frobenius_solution");
 }
 
 static FrobeniusSolutionResult singular_frobenius_solution(
@@ -292,10 +326,12 @@ static FrobeniusSolutionResult singular_frobenius_solution(
     const std::shared_ptr<SymbolicExpr>& q,
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x, const std::shared_ptr<SymbolicExpr>& x_minus_x0,
-    FrobeniusSolution result, ComputationContext& context) {
-    auto xp_expr = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
-    auto x2q_expr = SymbolicExpr::multiply(
-        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
+    FrobeniusSolution result, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto xp_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(x_minus_x0, p)), transform_budget));
+    auto x2q_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)), transform_budget));
 
     auto P0_result = limit_expression_checked(
         xp_expr, x, x0, LimitDirection::Both, context);
@@ -323,8 +359,8 @@ static FrobeniusSolutionResult singular_frobenius_solution(
      * @brief 在原定义域内确认去心极限有限后约分，提取可去奇点解析延拓的 Taylor 系数。
      * @note 原乘积未经约分的导数仍含缺失点，不能直接用于系数计算。
      */
-    xp_expr = xp_expr->cancel()->simplify();
-    x2q_expr = x2q_expr->cancel()->simplify();
+    xp_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(xp_expr->cancel()), transform_budget));
+    x2q_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(x2q_expr->cancel()), transform_budget));
 
     auto roots = frobenius_indicial_roots(P0, Q0);
     if (!roots) {
@@ -344,8 +380,16 @@ static FrobeniusSolutionResult singular_frobenius_solution(
     }
     auto power_prefix = SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(r1));
     auto series_part = assemble_frobenius_polynomial(recurrence.value(), x_minus_x0);
-    result.series_solution = SymbolicExpr::multiply(power_prefix, series_part)->simplify();
+    result.series_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(power_prefix, series_part)), transform_budget));
     return result;
+} catch (const CasError& error) {
+    return FrobeniusSolutionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return FrobeniusSolutionResult::failure(CasErrc::ResourceLimit, "allocation failed", "singular_frobenius_solution");
+} catch (const std::length_error& error) {
+    return FrobeniusSolutionResult::failure(CasErrc::ResourceLimit, error.what(), "singular_frobenius_solution");
+} catch (const std::exception& error) {
+    return FrobeniusSolutionResult::failure(CasErrc::InternalInvariant, error.what(), "singular_frobenius_solution");
 }
 
 ODESingularityResult classify_singular_point_checked(
@@ -354,15 +398,17 @@ ODESingularityResult classify_singular_point_checked(
     const std::shared_ptr<SymbolicExpr>& x0,
     const std::string& x,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "classify_singular_point";
     auto valid = validate_ode_two_expr_point(p, q, x0, x, context, operation);
     if (!valid) {
         return ODESingularityResult::failure(valid.error());
     }
     try {
-        auto p_at_x0 = p->substitute(x, x0)->simplify();
-        auto q_at_x0 = q->substitute(x, x0)->simplify();
+        auto p_at_x0 = detail::make_expression_ptr(detail::substitute_node(detail::node(p), x, detail::node(x0), transform_budget));
+        auto q_at_x0 = detail::make_expression_ptr(detail::substitute_node(detail::node(q), x, detail::node(x0), transform_budget));
         const double p_val = try_eval_double(p_at_x0);
         const double q_val = try_eval_double(q_at_x0);
         if (std::isfinite(p_val) && std::isfinite(q_val)) {
@@ -382,10 +428,10 @@ ODESingularityResult classify_singular_point_checked(
         auto x_var = SymbolicExpr::variable(x);
         auto x_minus_x0 = SymbolicExpr::add(
             x_var, SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
-        auto xp = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
-        auto x2q = SymbolicExpr::multiply(
+        auto xp = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(x_minus_x0, p)), transform_budget));
+        auto x2q = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
             SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)),
-            q)->simplify();
+            q)), transform_budget));
         auto xp_limit = limit_checked(xp, x, x0, LimitDirection::Both, context);
         if (!xp_limit) return ODESingularityResult::failure(xp_limit.error());
         auto x2q_limit = limit_checked(x2q, x, x0, LimitDirection::Both, context);
@@ -400,10 +446,18 @@ ODESingularityResult classify_singular_point_checked(
             CasErrc::ResourceLimit,
             "allocation failed while classifying ODE singularity",
             operation);
-    } catch (const std::exception& ex) {
+    } catch (const std::length_error& error) { return ODESingularityResult::failure(CasErrc::ResourceLimit, error.what(), "classify_singular_point"); } catch (const std::exception& ex) {
         return ODESingularityResult::failure(
             CasErrc::InternalInvariant, ex.what(), operation);
     }
+} catch (const CasError& error) {
+    return ODESingularityResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ODESingularityResult::failure(CasErrc::ResourceLimit, "allocation failed", "classify_singular_point");
+} catch (const std::length_error& error) {
+    return ODESingularityResult::failure(CasErrc::ResourceLimit, error.what(), "classify_singular_point");
+} catch (const std::exception& error) {
+    return ODESingularityResult::failure(CasErrc::InternalInvariant, error.what(), "classify_singular_point");
 }
 
 ODESingularityResult classify_singular_point_checked(
@@ -424,13 +478,15 @@ static Result<void> validate_frobenius_regular_singular_domain(
     const std::string& x,
     ComputationContext& context,
     const std::string& operation)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto x_var = SymbolicExpr::variable(x);
     auto x_minus_x0 = SymbolicExpr::add(x_var,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), x0));
-    auto xp_expr = SymbolicExpr::multiply(x_minus_x0, p)->simplify();
-    auto x2q_expr = SymbolicExpr::multiply(
-        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)->simplify();
+    auto xp_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(x_minus_x0, p)), transform_budget));
+    auto x2q_expr = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+        SymbolicExpr::power(x_minus_x0, SymbolicExpr::number(2)), q)), transform_budget));
 
     auto P0_result = limit_expression_checked(
         xp_expr, x, x0, LimitDirection::Both, context);
@@ -469,6 +525,14 @@ static Result<void> validate_frobenius_regular_singular_domain(
     }
 
     return Result<void>::success();
+} catch (const CasError& error) {
+    return Result<void>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<void>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<void>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<void>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 FrobeniusSolutionResult solve_frobenius_checked(
@@ -584,7 +648,7 @@ static FrobeniusSolutionResult solve_frobenius_impl(
     }
 
     if (result.point_type == ODESingularityType::Ordinary) {
-        return ordinary_frobenius_solution(p, q, x0, x, x_minus_x0, std::move(result));
+        return ordinary_frobenius_solution(p, q, x0, x, x_minus_x0, std::move(result), context);
     }
     return singular_frobenius_solution(
         p, q, x0, x, x_minus_x0, std::move(result), context);

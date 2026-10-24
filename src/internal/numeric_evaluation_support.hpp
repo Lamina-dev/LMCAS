@@ -27,6 +27,7 @@ private:
     Result<ApproxReal> product(const MultiplyNode& node);
     Result<ApproxReal> norm(const std::array<const PowerNode*, 2>& squares);
     Result<ApproxReal> power(const PowerNode& node);
+    Result<ApproxReal> square_root(const NumberNode& node);
     Result<ApproxReal> function(const FunctionNode& node);
     Result<ApproxReal> atan2(const FunctionNode& node);
     Result<ApproxReal> extremum(const FunctionNode& node);

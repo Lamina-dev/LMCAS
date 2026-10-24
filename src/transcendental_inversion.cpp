@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "solve_polynomial.hpp"
 #include "assumption_context.hpp"
 #include "internal/assumption_simplification.hpp"
@@ -17,8 +19,9 @@ namespace LMCAS::detail::transcendental {
 
 bool try_evaluate_numeric(
     const std::shared_ptr<SymbolicExpr>& expr,
-    lmmc_real_t& out) {
-    auto numeric = detail::try_finite_numeric(expr);
+    lmmc_real_t& out, ComputationContext& context) {
+    if (!expr) return false;
+    auto numeric = detail::try_finite_numeric(*expr, context);
     if (!numeric) {
         return false;
     }
@@ -27,21 +30,26 @@ bool try_evaluate_numeric(
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> invert_lambert_w(
-    const std::shared_ptr<SymbolicExpr>& c) {
+    const std::shared_ptr<SymbolicExpr>& c, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     auto sol = SymbolicExpr::lambertw(c);
     if (!sol) {
         return {};
     }
-    return {sol->simplify()};
+    return {detail::make_expression_ptr(detail::normalize_node(detail::node(sol), transform_budget))};
 }
 
 std::vector<std::shared_ptr<SymbolicExpr>> invert_exp_base(
     const std::shared_ptr<SymbolicExpr>& base,
-    const std::shared_ptr<SymbolicExpr>& c) {
+    const std::shared_ptr<SymbolicExpr>& c, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     lmmc_real_t c_val;
-    if (try_evaluate_numeric(c, c_val)) {
+    if (try_evaluate_numeric(c, c_val, context)) {
         if (c_val <= 0.0) {
             return {};
         }
@@ -49,7 +57,7 @@ std::vector<std::shared_ptr<SymbolicExpr>> invert_exp_base(
 
     auto ln_c = SymbolicExpr::ln(c);
     auto ln_a = SymbolicExpr::ln(base);
-    auto sol = SymbolicExpr::divide(ln_c, ln_a)->simplify();
+    auto sol = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(ln_c, ln_a)), transform_budget));
     return {sol};
 }
 
@@ -156,36 +164,16 @@ SolveResult constant_trigonometric_preimage(FunctionNode::FuncType type,
 
 Result<std::string> capture_free_integer_parameter(const ExprPtr& original,
     const std::string& var, ComputationContext& context) {
-    auto occupied = detail::all_variable_names(detail::node(original));
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "solve.parameter");
+    auto occupied = detail::all_variable_names(detail::node(original), &budget);
     occupied.insert(var);
     if (context.assumptions()) {
-        /**
-         * @brief 生成的绑定变量须避开全部假设中的名称，包括与方程无关的事实。
-         * 遍历私有作用域栈副本，保持调用方假设栈不变。
-         */
-        AssumptionContext scopes = *context.assumptions();
-        const auto include_expression = [&](const SymbolicExpr& expression) {
-            auto names = detail::all_variable_names(detail::node(expression));
-            occupied.insert(names.begin(), names.end());
-        };
-        for (const auto& conditional : scopes.get_active_conditionals()) {
-            include_expression(conditional.condition);
-            include_expression(conditional.conclusion);
-        }
-        for (;;) {
-            auto names = scopes.current_properties().get_all_symbols();
-            occupied.insert(names.begin(), names.end());
-            for (const auto& relation : scopes.current_relations().get_relations()) {
-                include_expression(relation.lhs);
-                include_expression(relation.rhs);
-            }
-            if (scopes.depth() == 1) { break; }
-            auto popped = scopes.pop();
-            if (!popped) { return Result<std::string>::failure(popped.error()); }
-        }
+        detail::AssumptionFacts::collect_names(*context.assumptions(), occupied, budget);
     }
     std::string parameter = "_k";
     for (std::size_t suffix = 1; occupied.count(parameter); ++suffix) {
+        budget.consume();
         parameter = "_k" + std::to_string(suffix);
     }
     return parameter;
@@ -208,14 +196,17 @@ ExprPtr trigonometric_principal_value(FunctionNode::FuncType type,
 }
 
 std::vector<ExprPtr> trigonometric_periodic_values(FunctionNode::FuncType type,
-    const ExprPtr& rhs, const std::string& parameter) {
+    const ExprPtr& rhs, const std::string& parameter, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     using Type = FunctionNode::FuncType;
     auto pi = detail::make_expression_ptr(
         detail::make_node<VariableNode>("pi", true));
     auto integer_pi = SymbolicExpr::multiply(SymbolicExpr::variable(parameter), pi);
     auto twice_integer_pi = SymbolicExpr::multiply(SymbolicExpr::number(2), integer_pi);
     auto half_pi = SymbolicExpr::multiply(SymbolicExpr::number(Rational(1, 2)), pi);
-    auto integer = exact_small_integer_node(detail::node(rhs->simplify()), -1, 1);
+    auto integer = exact_small_integer_node(detail::normalize_node(detail::node(rhs), transform_budget), -1, 1);
     std::vector<ExprPtr> values;
     if (type == Type::Tan) {
         auto principal = integer ?
@@ -265,7 +256,7 @@ SolveResult invert_trigonometric(
     auto fresh = capture_free_integer_parameter(original, var, context);
     if (!fresh) { return SolveResult::failure(fresh.error()); }
     const auto& parameter = fresh.value();
-    auto values = trigonometric_periodic_values(pattern.func_type, rhs, parameter);
+    auto values = trigonometric_periodic_values(pattern.func_type, rhs, parameter, context);
     ParametricSolutions solutions;
     for (const auto& value : values) {
         auto mapped = detail::simplify_expression(SymbolicExpr::divide(
@@ -278,7 +269,9 @@ SolveResult invert_trigonometric(
 }
 
 SolveResult invert_exponential(const ExprPtr& rhs, const ExprPtr& original,
-    const std::string& var, const FactsQuery& facts, ComputationContext& context) {
+    const std::string& var, const FactsQuery& facts, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto real = detail::query_real_value(detail::node(rhs), facts, context);
     if (!real) { return SolveResult::failure(real.error()); }
     auto positive = detail::query_positive_value(detail::node(rhs), facts, context);
@@ -287,24 +280,44 @@ SolveResult invert_exponential(const ExprPtr& rhs, const ExprPtr& original,
         return SolutionSet{EmptySolutions{}};
     }
     if (positive.value() != Tribool::True) { return conditional_preimage(original, var); }
-    auto value = SymbolicExpr::ln(rhs)->simplify();
+    auto value = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::ln(rhs)), transform_budget));
     return SolutionSet{FiniteSolutions{{FiniteSolution{std::move(value), 1, {}}}}};
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "invert_exponential");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "invert_exponential");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "invert_exponential");
 }
 
 SolveResult invert_logarithm(const ExprPtr& rhs, const ExprPtr& original,
-    const std::string& var, const FactsQuery& facts, ComputationContext& context) {
+    const std::string& var, const FactsQuery& facts, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto real = detail::query_real_value(detail::node(rhs), facts, context);
     if (!real) { return SolveResult::failure(real.error()); }
     if (real.value() != Tribool::True) { return conditional_preimage(original, var); }
-    auto value = SymbolicExpr::exp(rhs)->simplify();
+    auto value = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::exp(rhs)), transform_budget));
     return SolutionSet{FiniteSolutions{{FiniteSolution{std::move(value), 1, {}}}}};
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "invert_logarithm");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "invert_logarithm");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "invert_logarithm");
 }
 
 }
 
 SolveResult invert_function(
     const InversePattern& pattern, const ExprPtr& original, const std::string& var,
-    ComputationContext& context, const SolveOptions&) {
+    ComputationContext& context, const SolveOptions&) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto step = context.consume_steps(1, "solve.inverse");
     if (!step) { return SolveResult::failure(step.error()); }
     std::optional<detail::AssumptionFacts> assumption_facts;
@@ -316,7 +329,7 @@ SolveResult invert_function(
         auto nonzero = detail::query_nonzero_value(detail::node(pattern.coefficient), facts, Domain::Real, context);
         if (!nonzero) { return SolveResult::failure(nonzero.error()); }
         if (nonzero.value() != Tribool::True) { return conditional_preimage(original, var); }
-        rhs = SymbolicExpr::divide(rhs, pattern.coefficient)->simplify();
+        rhs = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(rhs, pattern.coefficient)), transform_budget));
     }
     switch (pattern.func_type) {
     case FunctionNode::FuncType::Sin:
@@ -331,6 +344,14 @@ SolveResult invert_function(
         return SolveResult::failure(CasErrc::Inconclusive,
             "Inverse requires a complete solution-set representation", "solve.inverse");
     }
+} catch (const CasError& error) {
+    return SolveResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SolveResult::failure(CasErrc::ResourceLimit, "allocation failed", "invert_function");
+} catch (const std::length_error& error) {
+    return SolveResult::failure(CasErrc::ResourceLimit, error.what(), "invert_function");
+} catch (const std::exception& error) {
+    return SolveResult::failure(CasErrc::InternalInvariant, error.what(), "invert_function");
 }
 
 

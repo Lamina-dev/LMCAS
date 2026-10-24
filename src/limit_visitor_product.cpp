@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 
 namespace LMCAS {
@@ -141,7 +142,7 @@ void LimitVisitor::visit(const MultiplyNode& node) {
     }
     std::shared_ptr<const SymbolicNode> substituted;
     if (std::all_of(values.begin(), values.end(), [](const auto& value) { return value != nullptr; })) {
-        NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+        NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
         LMCAS::detail::make_node<MultiplyNode>(values)->accept(norm);
         substituted = norm.get_result();
     }

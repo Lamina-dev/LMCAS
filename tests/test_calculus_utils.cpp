@@ -1,3 +1,4 @@
+#include "expr.hpp"
 /**
  * @file test_calculus_utils.cpp
  * @brief 测试 calculus_utils 模块：对数微分、微分、全微分、反函数导数、反函数。
@@ -102,7 +103,7 @@ TEST(CalculusUtils, ReciprocalAsymptotes) {
 
     EXPECT_TRUE((!result.vertical.empty())) << "1/x has vertical asymptote(s)";
     if (!result.vertical.empty()) {
-        auto val = test_numeric_eval(result.vertical[0]->simplify());
+        auto val = test_numeric_eval(LMCAS::simplify(result.vertical[0]).value());
         if (val) {
             EXPECT_NEAR(*val, 0.0, 1e-9) << "vertical asymptote at x=0";
         } else {
@@ -112,7 +113,7 @@ TEST(CalculusUtils, ReciprocalAsymptotes) {
 
     EXPECT_TRUE((!result.horizontal.empty())) << "1/x has horizontal asymptote(s)";
     if (!result.horizontal.empty()) {
-        auto h = result.horizontal[0]->simplify();
+        auto h = LMCAS::simplify(result.horizontal[0]).value();
         bool is_zero_val = h->is_zero();
         if (!is_zero_val) {
             auto val = test_numeric_eval(h);
@@ -133,7 +134,7 @@ TEST(CalculusUtils, RationalAsymptotes) {
 
     EXPECT_TRUE((!result.vertical.empty())) << "(2x+1)/(x-1) has vertical asymptote(s)";
     if (!result.vertical.empty()) {
-        auto val = test_numeric_eval(result.vertical[0]->simplify());
+        auto val = test_numeric_eval(LMCAS::simplify(result.vertical[0]).value());
         if (val) {
             EXPECT_NEAR(*val, 1.0, 1e-9) << "vertical asymptote at x=1";
         } else {
@@ -143,7 +144,7 @@ TEST(CalculusUtils, RationalAsymptotes) {
 
     EXPECT_TRUE((!result.horizontal.empty())) << "(2x+1)/(x-1) has horizontal asymptote(s)";
     if (!result.horizontal.empty()) {
-        auto val = test_numeric_eval(result.horizontal[0]->simplify());
+        auto val = test_numeric_eval(LMCAS::simplify(result.horizontal[0]).value());
         if (val) {
             EXPECT_NEAR(*val, 2.0, 1e-9) << "horizontal asymptote at y=2";
         } else {
@@ -165,14 +166,14 @@ TEST(CalculusUtils, ObliqueAsymptotes) {
     auto result = LMCAS::asymptotes_checked(f, "x").value();
 
     ASSERT_FALSE(result.vertical.empty()) << "(x^2+1)/(x-1) has vertical asymptote(s)";
-    const auto vertical = test_numeric_eval(result.vertical[0]->simplify());
+    const auto vertical = test_numeric_eval(LMCAS::simplify(result.vertical[0]).value());
     ASSERT_TRUE(vertical.has_value()) << "vertical asymptote numeric eval failed";
     EXPECT_TRUE(std::isfinite(*vertical));
     EXPECT_NEAR(*vertical, 1.0, 1e-9) << "vertical asymptote at x=1";
 
     ASSERT_FALSE(result.oblique.empty()) << "(x^2+1)/(x-1) has oblique asymptote(s)";
-    const auto slope = test_numeric_eval(result.oblique[0].first->simplify());
-    const auto intercept = test_numeric_eval(result.oblique[0].second->simplify());
+    const auto slope = test_numeric_eval(LMCAS::simplify(result.oblique[0].first).value());
+    const auto intercept = test_numeric_eval(LMCAS::simplify(result.oblique[0].second).value());
     ASSERT_TRUE(slope.has_value()) << result.oblique[0].first->to_string();
     ASSERT_TRUE(intercept.has_value()) << result.oblique[0].second->to_string();
     EXPECT_TRUE(std::isfinite(*slope));

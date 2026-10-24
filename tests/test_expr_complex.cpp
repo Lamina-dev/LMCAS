@@ -47,13 +47,13 @@ TEST(ExprComplex, ImaginaryUnitMultiplication) {
     auto i = LMCAS::imaginary_unit();
     auto i_squared = SymbolicExpr::multiply(i.value(), i.value());
     LMCAS::ComputationContext complex_equivalence_context;
-    auto complex_equivalent = LMCAS::equivalent_core(
+    auto complex_equivalent = LMCAS::equivalent(
         *i_squared, *SymbolicExpr::number(-1), complex_equivalence_context);
     EXPECT_TRUE((complex_equivalent && complex_equivalent.value())) << "I * I is equivalent to -1 in the LMCAS core profile";
 
     auto i_power_two = SymbolicExpr::power(i.value(), SymbolicExpr::number(2));
     LMCAS::ComputationContext complex_power_equivalence_context;
-    auto complex_power_equivalent = LMCAS::equivalent_core(
+    auto complex_power_equivalent = LMCAS::equivalent(
         *i_power_two, *SymbolicExpr::number(-1),
         complex_power_equivalence_context);
     EXPECT_TRUE((complex_power_equivalent &&
@@ -67,7 +67,7 @@ TEST(ExprComplex, OrdinaryIRemainsSymbolic) {
     auto legacy_i_squared =
         SymbolicExpr::multiply(variable_i, variable_i);
     LMCAS::ComputationContext legacy_i_equivalence_context;
-    auto legacy_i_equivalent = LMCAS::equivalent_core(
+    auto legacy_i_equivalent = LMCAS::equivalent(
         *legacy_i_squared, *SymbolicExpr::number(-1),
         legacy_i_equivalence_context);
     EXPECT_TRUE((legacy_i_equivalent && !legacy_i_equivalent.value())) << "ordinary variable(\"i\") does not follow the imaginary-unit multiplication rule";
@@ -77,7 +77,7 @@ TEST(ExprComplex, OrdinaryIRemainsSymbolic) {
     auto one_plus_canonical_i =
         SymbolicExpr::add(SymbolicExpr::number(1), i.value());
     LMCAS::ComputationContext legacy_i_add_context;
-    auto legacy_i_add_equivalent = LMCAS::equivalent_core(
+    auto legacy_i_add_equivalent = LMCAS::equivalent(
         *legacy_i_plus_one, *one_plus_canonical_i,
         legacy_i_add_context);
     EXPECT_TRUE((!legacy_i_add_equivalent &&
@@ -103,7 +103,7 @@ TEST(ExprComplex, ComplexParts) {
     auto expected_conj = LMCAS::complex(SymbolicExpr::number(3),
                                         SymbolicExpr::number(-4));
     LMCAS::ComputationContext conj_context;
-    auto conj_equiv = LMCAS::equivalent_core(
+    auto conj_equiv = LMCAS::equivalent(
         *conjugated.value(), *expected_conj.value(), conj_context);
     EXPECT_TRUE((conj_equiv && conj_equiv.value())) << "conj(3 + 4I) returns 3 - 4I";
 }
@@ -122,7 +122,7 @@ TEST(ExprComplex, ExactComplexModulus) {
 }
 
 TEST(ExprComplex, ExtremeConstantModulus) {
-    for (double component : {1e200, 1e-200}) {
+    for (double component : {1e200, -1e200, 1e-200, -1e-200}) {
         auto z = LMCAS::complex(
             SymbolicExpr::number(component), SymbolicExpr::number(component));
         auto magnitude = LMCAS::abs(z.value());
@@ -233,9 +233,9 @@ void expect_exact_complex_components(
         return;
     }
     ComputationContext context;
-    auto real_equal = equivalent_core(*real_component.value(),
+    auto real_equal = equivalent(*real_component.value(),
                                       *SymbolicExpr::number(expected_real), context);
-    auto imag_equal = equivalent_core(*imag_component.value(),
+    auto imag_equal = equivalent(*imag_component.value(),
                                       *SymbolicExpr::number(expected_imag), context);
     EXPECT_TRUE((real_equal && real_equal.value())) << "real component equals exact oracle";
     EXPECT_TRUE((imag_equal && imag_equal.value())) << "imaginary component equals exact oracle";

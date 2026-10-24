@@ -1,6 +1,8 @@
+#include "internal/expression_transform.hpp"
 #include "internal/exact_matrix_support.hpp"
 #include "internal/normalization_utils.hpp"
 #include "assumption_context.hpp"
+#include "internal/expression_analysis.hpp"
 
 #include <limits>
 #include <new>
@@ -31,56 +33,43 @@ Result<void> validate_matrix(
     return Result<void>::success();
 }
 
-
-bool contains_approximate_number(const ExprPtr& expression) {
-    return expression &&
-        contains_inexact_number(node(expression));
-}
-
 std::optional<Rational> exact_rational(const ExprPtr& expression) {
     if (!expression || !node(expression)) {
         return std::nullopt;
     }
-    auto number = std::dynamic_pointer_cast<const NumberNode>(node(expression));
-    if (!number) {
-        return std::nullopt;
-    }
-    if (std::holds_alternative<BigInt>(number->value())) {
-        return Rational(std::get<BigInt>(number->value()));
-    }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value());
-    }
-    return std::nullopt;
+    return exact_rational_value(node(expression));
 }
 
-ExprPtr simplify_expr(ExprPtr expression) {
+ExprPtr simplify_expr(ExprPtr expression, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expression) {
         return expression;
     }
-    auto simplified = expression->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expression), transform_budget));
     return simplified ? simplified : expression;
 }
 
-ExprPtr exact_add(const ExprPtr& left, const ExprPtr& right) {
-    return simplify_expr(SymbolicExpr::add(left, right));
+ExprPtr exact_add(const ExprPtr& left, const ExprPtr& right, ComputationContext& context) {
+    return simplify_expr(SymbolicExpr::add(left, right), context);
 }
 
-ExprPtr exact_negate(const ExprPtr& expression) {
+ExprPtr exact_negate(const ExprPtr& expression, ComputationContext& context) {
     return simplify_expr(SymbolicExpr::multiply(
-        SymbolicExpr::number(-1), expression));
+        SymbolicExpr::number(-1), expression), context);
 }
 
-ExprPtr exact_subtract(const ExprPtr& left, const ExprPtr& right) {
-    return exact_add(left, exact_negate(right));
+ExprPtr exact_subtract(const ExprPtr& left, const ExprPtr& right, ComputationContext& context) {
+    return exact_add(left, exact_negate(right, context), context);
 }
 
-ExprPtr exact_multiply(const ExprPtr& left, const ExprPtr& right) {
-    return simplify_expr(SymbolicExpr::multiply(left, right));
+ExprPtr exact_multiply(const ExprPtr& left, const ExprPtr& right, ComputationContext& context) {
+    return simplify_expr(SymbolicExpr::multiply(left, right), context);
 }
 
-ExprPtr exact_divide(const ExprPtr& numerator, const ExprPtr& denominator) {
-    return simplify_expr(SymbolicExpr::divide(numerator, denominator));
+ExprPtr exact_divide(const ExprPtr& numerator, const ExprPtr& denominator, ComputationContext& context) {
+    return simplify_expr(SymbolicExpr::divide(numerator, denominator), context);
 }
 
 void swap_rows(ExactMatrixData& matrix, std::size_t first, std::size_t second) {
@@ -190,10 +179,7 @@ Result<ZeroProof> classify_exact_zero(
             "zero classification requires an expression", operation);
     }
     try {
-        if (contains_approximate_number(expression)) {
-            return Result<ZeroProof>::success(ZeroProof::Unknown);
-        }
-        auto simplified = simplify_expr(expression);
+        auto simplified = simplify_expr(expression, context);
         if (auto proof = classify_numeric_value(simplified)) {
             return Result<ZeroProof>::success(*proof);
         }
@@ -211,6 +197,10 @@ Result<ZeroProof> classify_exact_zero(
             return Result<ZeroProof>::success(ZeroProof::Zero);
         }
         return Result<ZeroProof>::success(ZeroProof::Unknown);
+    } catch (const CasError& error) {
+        return Result<ZeroProof>::failure(error);
+    } catch (const std::length_error& error) {
+        return Result<ZeroProof>::failure(CasErrc::ResourceLimit, error.what(), operation);
     } catch (const std::bad_alloc&) {
         return Result<ZeroProof>::failure(
             CasErrc::ResourceLimit,

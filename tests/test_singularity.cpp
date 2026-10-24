@@ -33,7 +33,8 @@ TEST(LmcasSingularity, ImproperIntegralSingularity) {
     auto lower = SymbolicExpr::number(-1);
     auto upper = SymbolicExpr::number(1);
 
-    auto res = integrator.integrate_def(*expr, "x", *lower, *upper);
+    ComputationContext context;
+    auto res = integrator.integrate_def_checked(*expr, "x", *lower, *upper, context);
     EXPECT_FALSE((res.has_value())) << ("opposite logarithmic divergences have no ordinary integral");
     if (!res) {
         EXPECT_TRUE((res.error().code == CasErrc::DomainError)) << ("ordinary nonexistence is a domain error, not an unevaluated principal value");

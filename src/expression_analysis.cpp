@@ -44,8 +44,9 @@ private:
 };
 class FreeVariableFinder final : public detail::RecursiveSymbolicVisitor {
 public:
-    explicit FreeVariableFinder(std::string_view name, detail::RewriteBudget* budget = nullptr)
-        : RecursiveSymbolicVisitor(budget), name_(name) {}
+    explicit FreeVariableFinder(std::string_view name, detail::RewriteBudget* budget = nullptr,
+        bool antiderivatives = false)
+        : RecursiveSymbolicVisitor(budget), name_(name), antiderivatives_(antiderivatives) {}
     bool found = false;
 
     void visit(const VariableNode& node) override {
@@ -53,7 +54,11 @@ public:
     }
     void visit(const SummationNode& node) override { visit_binder(node); }
     void visit(const ProductNode& node) override { visit_binder(node); }
-    void visit(const IntegralNode& node) override { visit_binder(node); }
+    void visit(const IntegralNode& node) override {
+        if (antiderivatives_ && !node.lower() && !node.upper() && node.variable() == name_) {
+            found = true;
+        } else { visit_binder(node); }
+    }
     void visit(const TransformNode& node) override { visit_binder(node); }
     void visit(const QuantifierNode& node) override { visit_binder(node); }
     void visit(const SetBuilderNode& node) override { visit_binder(node); }
@@ -68,6 +73,7 @@ private:
     }
 
     const std::string_view name_;
+    const bool antiderivatives_;
 };
 
 class AllNameCollector final : public detail::RecursiveSymbolicVisitor {
@@ -113,7 +119,7 @@ std::set<std::string> all_names(const detail::SymbolicNodePtr& expression,
                                 detail::RewriteBudget* budget = nullptr) {
     AllNameCollector collector(budget);
     if (expression) expression->accept(collector);
-    return collector.names;
+    return std::move(collector.names);
 }
 
 std::string fresh_name(const std::string& base, std::set<std::string>& occupied) {
@@ -297,15 +303,17 @@ bool detail::is_imaginary_unit_name(const std::string& name) {
     return name == "I";
 }
 
-std::set<std::string> detail::all_variable_names(const detail::SymbolicNodePtr& expression) {
-    return all_names(expression);
+std::set<std::string> detail::all_variable_names(
+    const detail::SymbolicNodePtr& expression, detail::RewriteBudget* budget) {
+    if (budget) { budget->measure(expression); }
+    return all_names(expression, budget);
 }
 
 std::set<std::string> free_variables(const detail::SymbolicNodePtr& expression,
                                      detail::RewriteBudget* budget) {
     FreeVariableCollector collector(budget);
     if (expression) expression->accept(collector);
-    return collector.variables;
+    return std::move(collector.variables);
 }
 
 bool expression_depends_on_variable(
@@ -313,6 +321,14 @@ bool expression_depends_on_variable(
     const std::string& variable, detail::RewriteBudget* budget) {
     if (!expression || variable.empty()) return false;
     FreeVariableFinder finder(variable, budget);
+    expression->accept(finder);
+    return finder.found;
+}
+
+bool detail::integration_depends_on_variable(
+    const SymbolicNodePtr& expression, const std::string& variable, RewriteBudget* budget) {
+    if (!expression || variable.empty()) return false;
+    FreeVariableFinder finder(variable, budget, true);
     expression->accept(finder);
     return finder.found;
 }

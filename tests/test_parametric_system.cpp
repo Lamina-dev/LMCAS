@@ -139,9 +139,8 @@ static bool sampled_parametric_residual_is_zero(
     int verified = 0;
     for (double sa : samples) {
         try {
-            auto subst = result->substitute(
-                "a", SymbolicExpr::number(sa));
-            subst = subst->simplify();
+            auto subst = LMCAS::substitute(result, "a", SymbolicExpr::number(sa)).value();
+            subst = LMCAS::simplify(subst).value();
             auto v = numeric_eval(subst);
             if (!v || !std::isfinite(*v)) {
                 continue;
@@ -166,14 +165,14 @@ static bool parametric_equation_residual_is_zero(
     const std::shared_ptr<SymbolicExpr> &x_val,
     const std::shared_ptr<SymbolicExpr> &y_val, int iter) {
 
-    auto result = eq->substitute("x", x_val);
-    result = result->substitute("y", y_val);
-    result = result->simplify();
+    auto result = LMCAS::substitute(eq, "x", x_val).value();
+    result = LMCAS::substitute(result, "y", y_val).value();
+    result = LMCAS::simplify(result).value();
 
     if (!result->is_zero()) {
-        result = result->expand();
+        result = LMCAS::expand(result).value();
         if (result) {
-            result = result->simplify();
+            result = LMCAS::simplify(result).value();
         }
     }
 
@@ -206,14 +205,14 @@ static bool numeric_system_residuals_are_zero(
     const std::shared_ptr<SymbolicExpr> &y_val, int tested, int det) {
     bool back_sub_ok = true;
     for (const auto &eq : equations) {
-        auto result = eq->substitute("x", x_val);
-        result = result->substitute("y", y_val);
-        result = result->simplify();
+        auto result = LMCAS::substitute(eq, "x", x_val).value();
+        result = LMCAS::substitute(result, "y", y_val).value();
+        result = LMCAS::simplify(result).value();
 
         if (!result->is_zero()) {
-            result = result->expand();
+            result = LMCAS::expand(result).value();
             if (result) {
-                result = result->simplify();
+                result = LMCAS::simplify(result).value();
             }
         }
 
@@ -453,9 +452,7 @@ TEST(ParametricSystem, ParameterOnlyConstantTermIsPreservedExactly) {
     auto value = solutions.front().find("x");
     ASSERT_NE(value, solutions.front().end());
     EXPECT_TRUE(test_proved_equivalent(value->second, expected.value()));
-    auto residual = equation.value()
-                        ->substitute("x", value->second)
-                        ->simplify();
+    auto residual = LMCAS::simplify(LMCAS::substitute(equation.value(), "x", value->second).value()).value();
     ASSERT_NE(residual, nullptr);
     EXPECT_TRUE(residual->is_zero() ||
                 test_proved_equivalent(

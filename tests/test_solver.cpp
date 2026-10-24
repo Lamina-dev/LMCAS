@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
 
@@ -11,7 +12,7 @@ TEST(LmcasSolver, NegativeLinearRoot) {
     auto result = solve_finite_checked(expression, "x");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().size(), 1u);
-    EXPECT_TRUE(test_expression_text(result.value()[0]->simplify(), "-3"));
+    EXPECT_TRUE(test_expression_text(LMCAS::simplify(result.value()[0]).value(), "-3"));
 }
 
 TEST(LmcasSolver, PositiveLinearRoot) {
@@ -22,7 +23,7 @@ TEST(LmcasSolver, PositiveLinearRoot) {
     auto result = solve_finite_checked(expression, "x");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().size(), 1u);
-    EXPECT_TRUE(test_expression_text(result.value()[0]->simplify(), "3"));
+    EXPECT_TRUE(test_expression_text(LMCAS::simplify(result.value()[0]).value(), "3"));
 }
 
 TEST(LmcasSolver, MonicLinearRoot) {
@@ -31,7 +32,7 @@ TEST(LmcasSolver, MonicLinearRoot) {
     auto result = solve_finite_checked(expression, "x");
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().size(), 1u);
-    EXPECT_TRUE(test_expression_text(result.value()[0]->simplify(), "5"));
+    EXPECT_TRUE(test_expression_text(LMCAS::simplify(result.value()[0]).value(), "5"));
 }
 
 TEST(LmcasSolver, TwoQuadraticRoots) {
@@ -43,11 +44,11 @@ TEST(LmcasSolver, TwoQuadraticRoots) {
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().size(), 2u);
     const bool first_order =
-        test_expression_text(result.value()[0]->simplify(), "-2") &&
-        test_expression_text(result.value()[1]->simplify(), "2");
+        test_expression_text(LMCAS::simplify(result.value()[0]).value(), "-2") &&
+        test_expression_text(LMCAS::simplify(result.value()[1]).value(), "2");
     const bool second_order =
-        test_expression_text(result.value()[0]->simplify(), "2") &&
-        test_expression_text(result.value()[1]->simplify(), "-2");
+        test_expression_text(LMCAS::simplify(result.value()[0]).value(), "2") &&
+        test_expression_text(LMCAS::simplify(result.value()[1]).value(), "-2");
     EXPECT_TRUE(first_order || second_order);
 }
 
@@ -63,6 +64,6 @@ TEST(LmcasSolver, RepeatedQuadraticRoot) {
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().size(), 2u)
         << "x^2 + 2x + 1 preserves the double root";
-    EXPECT_TRUE(test_expression_text(result.value()[0]->simplify(), "-1"));
-    EXPECT_TRUE(test_expression_text(result.value()[1]->simplify(), "-1"));
+    EXPECT_TRUE(test_expression_text(LMCAS::simplify(result.value()[0]).value(), "-1"));
+    EXPECT_TRUE(test_expression_text(LMCAS::simplify(result.value()[1]).value(), "-1"));
 }

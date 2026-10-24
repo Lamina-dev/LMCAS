@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "numeric_evaluation.hpp"
 #include "solver.hpp"
@@ -31,7 +32,7 @@ static bool quadratic_trial_residuals_are_zero(
     bool trial_ok = true;
     for (size_t i = 0; i < sols.size(); ++i) {
 
-        auto residual_expr = expr->substitute("x", sols[i])->simplify();
+        auto residual_expr = LMCAS::simplify(LMCAS::substitute(expr, "x", sols[i]).value()).value();
         auto maybe_residual = real_numeric_value(residual_expr);
 
         if (disc < 0 && (!maybe_residual || std::abs(*maybe_residual) < 1e-6)) {
@@ -70,8 +71,8 @@ static bool quadratic_duplicate_roots_are_valid(
     const std::shared_ptr<SymbolicExpr> &expr, const BigInt &disc, double TOL) {
     if (disc == 0 && sols.size() == 2) {
 
-        auto res1 = expr->substitute("x", sols[0])->simplify();
-        auto res2 = expr->substitute("x", sols[1])->simplify();
+        auto res1 = LMCAS::simplify(LMCAS::substitute(expr, "x", sols[0]).value()).value();
+        auto res2 = LMCAS::simplify(LMCAS::substitute(expr, "x", sols[1]).value()).value();
         auto r1_val = real_numeric_value(res1);
         auto r2_val = real_numeric_value(res2);
         if (r1_val && r2_val && std::abs(*r1_val) < TOL && std::abs(*r2_val) < TOL) {
@@ -259,7 +260,7 @@ TEST(SolveExtended, DispatcherSimplificationConvertsFXGXToFXGX0) {
     EXPECT_TRUE((sols.size() == 1)) << "f(x)=g(x) form produces one solution";
     if (!sols.empty()) {
 
-        auto val = sols[0]->simplify();
+        auto val = LMCAS::simplify(sols[0]).value();
         auto num_val = val->to_numeric();
         bool close_to_2 = std::abs(num_val - 2.0) < 1e-10;
         EXPECT_TRUE((close_to_2)) << "f(x)=g(x) preprocessing: 2x+3=x+5 gives x=2";
@@ -308,7 +309,7 @@ TEST(SolveExtended, RootCountInvariantAcrossStrategies) {
             poly_expr = SymbolicExpr::multiply(poly_expr, factor);
         }
 
-        auto expanded = poly_expr->expand();
+        auto expanded = LMCAS::expand(poly_expr).value();
 
         auto solutions = LMCAS::solve_finite_checked(expanded, "x").value();
 

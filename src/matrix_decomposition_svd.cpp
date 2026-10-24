@@ -15,7 +15,7 @@ SVDDecompositionResult svd_decomposition_checked(
     auto budget = context.consume_steps(matrix.value()->rows() * matrix.value()->cols() * 32 + 32,
                                         operation);
     if (!budget) return SVDDecompositionResult::failure(budget.error());
-    auto diagonal = exact_rectangular_diagonal_entries(matrix.value());
+    auto diagonal = exact_rectangular_diagonal_entries(matrix.value(), context);
     if (diagonal) {
         std::vector<std::vector<std::shared_ptr<SymbolicExpr>>> signs(
             matrix.value()->rows(),

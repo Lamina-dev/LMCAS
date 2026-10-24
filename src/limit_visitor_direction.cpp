@@ -1,3 +1,5 @@
+#include "internal/rewrite_budget.hpp"
+#include "internal/expression_transform.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 #include "internal/exact_constant_bounds.hpp"
 #include "symbolic.hpp"
@@ -30,13 +32,13 @@ std::optional<std::pair<Rational, int>> LimitVisitor::exact_polynomial_leading(
 bool LimitVisitor::analytic_defined_at_point(
     const std::shared_ptr<const SymbolicNode>& expr,
     const std::shared_ptr<const SymbolicNode>& positive_base) const {
-    auto substituted = detail::make_expression_ptr(expr)->substitute(var, detail::make_expression_ptr(point));
+    auto substituted = detail::make_expression_ptr(detail::substitute_node(expr, var, point, *rewrite_budget()));
     if (!substituted) { return false; }
     std::optional<detail::AssumptionFacts> assumed;
     if (assumption_ctx_) { assumed.emplace(*assumption_ctx_); }
     const auto& facts = assumed ? static_cast<const FactsQuery&>(*assumed) : detail::no_facts();
     if (positive_base) {
-        auto at_point = detail::make_expression_ptr(positive_base)->substitute(var, detail::make_expression_ptr(point));
+        auto at_point = detail::make_expression_ptr(detail::substitute_node(positive_base, var, point, *rewrite_budget()));
         if (!at_point) { return false; }
         auto positive = detail::query_positive_value(detail::node(at_point), facts, *context_);
         if (!positive) { throw positive.error(); }
@@ -127,12 +129,12 @@ std::optional<int> LimitVisitor::power_sign_near_point(
 std::optional<int> LimitVisitor::analytic_sign_near_point(
     const std::shared_ptr<const SymbolicNode>& expr, const std::string& dir) {
     if (!analytic_at_point(expr)) { return std::nullopt; }
-    DifferentiationVisitor differentiation(var);
+    DifferentiationVisitor differentiation(var, *rewrite_budget());
     auto current = expr;
     for (int order = 0; order <= 8; ++order) {
-        auto substituted = detail::make_expression_ptr(current)->substitute(var, detail::make_expression_ptr(point));
+        auto substituted = detail::make_expression_ptr(detail::substitute_node(current, var, point, *rewrite_budget()));
         if (!substituted) { return std::nullopt; }
-        auto value = substituted->simplify();
+        auto value = detail::make_expression_ptr(detail::normalize_node(detail::node(substituted), *rewrite_budget()));
         auto sign = value ? get_node_sign(detail::node(value)) : std::nullopt;
         if (!sign) { return std::nullopt; }
         if (*sign) {
@@ -264,7 +266,7 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_sgn_li
     if (!al) {
         return std::nullopt;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     al->accept(norm);
     al = norm.get_result();
     if (!al->is_zero()) {
@@ -290,7 +292,7 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::evaluate_abs_li
     if (!al) {
         return std::nullopt;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     al->accept(norm);
     al = norm.get_result();
     if (is_inf(al)) {
@@ -325,9 +327,8 @@ std::optional<std::pair<Rational, int>> LimitVisitor::exact_leading_at_point(
         names.insert(point_names.begin(), point_names.end());
         std::string shifted_variable = "__limit_shift";
         while (names.count(shifted_variable)) { shifted_variable += "_"; }
-        auto shifted = detail::make_expression_ptr(expr)->substitute(var,
-            SymbolicExpr::add(detail::make_expression_ptr(point), SymbolicExpr::variable(shifted_variable)));
-        if (shifted) { shifted = shifted->expand(); }
+        auto shifted = detail::make_expression_ptr(detail::substitute_node(expr, var, detail::node(SymbolicExpr::add(detail::make_expression_ptr(point), SymbolicExpr::variable(shifted_variable))), *rewrite_budget()));
+        if (shifted) { shifted = detail::make_expression_ptr(detail::expand_node(detail::node(shifted), *rewrite_budget())); }
         if (!shifted) { return std::nullopt; }
         p = symbolic_to_poly<Rational>(shifted, shifted_variable);
         if (!p && p.error().code != CasErrc::UnsupportedExpression) { throw p.error(); }

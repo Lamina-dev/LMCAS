@@ -1,5 +1,4 @@
 #include "internal/query_support.hpp"
-#include <cmath>
 
 namespace LMCAS {
 
@@ -10,16 +9,6 @@ bool QueryInterface::is_unhandled_type(const SymbolicExpr& expression) const {
     if (std::dynamic_pointer_cast<const MatrixNode>(node)) return true;
     if (std::dynamic_pointer_cast<const RelationalNode>(node)) return true;
     if (std::dynamic_pointer_cast<const LogicalNode>(node)) return true;
-    return false;
-}
-
-bool QueryInterface::is_nan_number(const SymbolicExpr& expression) const {
-    const auto node = std::dynamic_pointer_cast<const NumberNode>(
-        LMCAS::detail::node(expression));
-    if (node && std::holds_alternative<lmmc_real_t>(node->value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(node->value());
-        return std::isnan(v);
-    }
     return false;
 }
 

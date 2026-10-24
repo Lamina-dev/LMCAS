@@ -1,15 +1,10 @@
+#include "expr.hpp"
 #include "limit_result.hpp"
 #include "symbolic.hpp"
 #include "test_common.hpp"
 
 using namespace LMCAS;
 
-TEST(LmcasCalculusLim, PolynomialPrimitive) {
-    auto x = SymbolicExpr::variable("x");
-    auto expr = SymbolicExpr::power(x, SymbolicExpr::number(2));
-    auto integrated = expr->integrate("x");
-    ASSERT_TRUE((integrated != nullptr)) << ("integral of x^2 exists");
-}
 
 TEST(LmcasCalculusLim, PolynomialLimit) {
     auto x = SymbolicExpr::variable("x");
@@ -23,7 +18,7 @@ TEST(LmcasCalculusLim, ConstantSumSimplification) {
     auto x = SymbolicExpr::variable("x");
     auto five = SymbolicExpr::number(5);
     auto sum = SymbolicExpr::add(five, x);
-    auto simple_sum = sum->simplify();
+    auto simple_sum = LMCAS::simplify(sum).value();
     EXPECT_TRUE(test_proved_equivalent(simple_sum, sum));
 }
 

@@ -14,12 +14,13 @@ struct CriticalPoint {
 };
 
 IntervalUnion zero_numerator_domain(const std::shared_ptr<SymbolicExpr>& denominator,
-                                    InequalityType type, const std::string& variable) {
+                                    InequalityType type, const std::string& variable,
+                                    ComputationContext& context) {
     if (type == InequalityType::GreaterThan || type == InequalityType::LessThan) {
         return IntervalUnion::empty();
     }
 
-    auto den_roots_with_mult = find_roots_with_multiplicity(denominator, variable);
+    auto den_roots_with_mult = find_roots_with_multiplicity(denominator, variable, context);
     if (den_roots_with_mult.empty()) {
         return IntervalUnion::entire_line();
     }
@@ -28,7 +29,10 @@ IntervalUnion zero_numerator_domain(const std::shared_ptr<SymbolicExpr>& denomin
     for (const auto& [root, mult] : den_roots_with_mult) {
         den_roots.push_back(root);
     }
-    std::sort(den_roots.begin(), den_roots.end(), root_less_than);
+    std::sort(den_roots.begin(), den_roots.end(),
+        [&context](const auto& lhs, const auto& rhs) {
+            return root_less_than(lhs, rhs, context);
+        });
 
     std::vector<Interval> intervals;
 
@@ -57,10 +61,10 @@ IntervalUnion zero_numerator_domain(const std::shared_ptr<SymbolicExpr>& denomin
 std::vector<CriticalPoint> rational_critical_points(
     const std::shared_ptr<SymbolicExpr>& numerator,
     const std::shared_ptr<SymbolicExpr>& denominator,
-    const std::string& variable) {
-    auto num_roots_with_mult = find_roots_with_multiplicity(numerator, variable);
+    const std::string& variable, ComputationContext& context) {
+    auto num_roots_with_mult = find_roots_with_multiplicity(numerator, variable, context);
 
-    auto den_roots_with_mult = find_roots_with_multiplicity(denominator, variable);
+    auto den_roots_with_mult = find_roots_with_multiplicity(denominator, variable, context);
     std::vector<CriticalPoint> critical_points;
 
     for (const auto& [root, mult] : num_roots_with_mult) {
@@ -70,7 +74,7 @@ std::vector<CriticalPoint> rational_critical_points(
 
         bool found = false;
         for (auto& cp : critical_points) {
-            if (roots_equal(cp.value, root)) {
+            if (roots_equal(cp.value, root, context)) {
                 cp.den_multiplicity = mult;
                 found = true;
                 break;
@@ -82,8 +86,8 @@ std::vector<CriticalPoint> rational_critical_points(
     }
 
     std::sort(critical_points.begin(), critical_points.end(),
-        [](const CriticalPoint& a, const CriticalPoint& b) {
-            return root_less_than(a.value, b.value);
+        [&context](const CriticalPoint& a, const CriticalPoint& b) {
+            return root_less_than(a.value, b.value, context);
         });
     return critical_points;
 }
@@ -123,10 +127,11 @@ bool has_unrecognized_variable_polynomial(
 }
 
 void include_rational_zeros(
-    std::vector<Interval>& intervals, const std::vector<CriticalPoint>& points) {
+    std::vector<Interval>& intervals, const std::vector<CriticalPoint>& points,
+    ComputationContext& context) {
     for (const auto& point : points) {
         if (point.num_multiplicity > 0 && point.den_multiplicity == 0) {
-            include_numeric_root(intervals, point.value);
+            include_numeric_root(intervals, point.value, context);
         }
     }
 }
@@ -138,6 +143,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
     const std::shared_ptr<SymbolicExpr>& denominator,
     InequalityType type,
     const std::string& variable) {
+    ComputationContext context;
 
     if (!numerator || !denominator) {
         return IntervalUnion::empty();
@@ -155,7 +161,7 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
     }
 
     if (num_poly.is_zero()) {
-        return zero_numerator_domain(denominator, type, variable);
+        return zero_numerator_domain(denominator, type, variable, context);
     }
     if (has_unrecognized_variable_polynomial(numerator, variable)) {
         throw std::invalid_argument("Numerator is not a supported rational polynomial");
@@ -163,16 +169,16 @@ IntervalUnion InequalitySolver::solve_rational_inequality(
     if (has_unrecognized_variable_polynomial(denominator, variable)) {
         throw std::invalid_argument("Denominator is not a supported rational polynomial");
     }
-    auto critical_points = rational_critical_points(numerator, denominator, variable);
-    int num_leading_sign = determine_leading_sign(num_poly);
-    int den_leading_sign = determine_leading_sign(den_poly);
+    auto critical_points = rational_critical_points(numerator, denominator, variable, context);
+    int num_leading_sign = determine_leading_sign(num_poly, context);
+    int den_leading_sign = determine_leading_sign(den_poly, context);
     int combined_leading_sign = num_leading_sign * den_leading_sign;
     bool want_positive = (type == InequalityType::GreaterThan || type == InequalityType::GreaterEqual);
     bool is_strict = (type == InequalityType::GreaterThan || type == InequalityType::LessThan);
     int target_sign = want_positive ? 1 : -1;
     auto result_intervals = rational_sign_intervals(critical_points, combined_leading_sign, target_sign);
     if (!is_strict) {
-        include_rational_zeros(result_intervals, critical_points);
+        include_rational_zeros(result_intervals, critical_points, context);
     }
     return IntervalUnion(result_intervals);
 }

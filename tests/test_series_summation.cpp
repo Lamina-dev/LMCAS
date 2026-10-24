@@ -1,3 +1,4 @@
+#include "expr.hpp"
 /**
  * @file test_series_summation.cpp
  * @brief 验证有限符号求和与连乘的契约。
@@ -8,11 +9,8 @@
 
 using namespace LMCAS;
 
-using Expr = std::shared_ptr<SymbolicExpr>;
-using Coeffs = std::vector<Expr>;
-
-static Expr num(int n) { return SymbolicExpr::number(n); }
-static Expr var(const std::string &name) { return SymbolicExpr::variable(name); }
+static ExprPtr num(int n) { return SymbolicExpr::number(n); }
+static ExprPtr var(const std::string &name) { return SymbolicExpr::variable(name); }
 
 TEST(SeriesSummation, SymbolicSumConstant) {
     auto result = LMCAS::symbolic_sum(num(3), "k", num(1), num(5));
@@ -27,9 +25,9 @@ TEST(SeriesSummation, SymbolicSumLinear) {
     auto k = var("k");
     auto result = LMCAS::symbolic_sum(k, "k", num(1), n);
     ASSERT_TRUE(result) << "symbolic sum returns an expression";
-    auto substituted = result->substitute("n", num(10));
+    auto substituted = LMCAS::substitute(result, "n", num(10)).value();
     ASSERT_TRUE(substituted) << "the summation result accepts its upper bound";
-    auto value = substituted->simplify();
+    auto value = LMCAS::simplify(substituted).value();
     ASSERT_TRUE(value);
     EXPECT_EQ(value->compare(num(55)), 0)
         << "substituting n=10 into the closed form gives 55";
@@ -42,9 +40,9 @@ TEST(SeriesSummation, SymbolicSumQuadratic) {
     auto result = LMCAS::symbolic_sum(k_sq, "k", num(1), n);
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        auto val = result->substitute("n", num(5));
+        auto val = LMCAS::substitute(result, "n", num(5)).value();
         if (val) {
-            val = val->simplify();
+            val = LMCAS::simplify(val).value();
             EXPECT_TRUE(test_expression_text(val, num(55))) << "sum k=1..5 k^2 = 55";
         }
     }
@@ -57,9 +55,9 @@ TEST(SeriesSummation, SymbolicSumCubic) {
     auto result = LMCAS::symbolic_sum(k_cubed, "k", num(1), n);
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        auto val = result->substitute("n", num(4));
+        auto val = LMCAS::substitute(result, "n", num(4)).value();
         if (val) {
-            val = val->simplify();
+            val = LMCAS::simplify(val).value();
             EXPECT_TRUE(test_expression_text(val, num(100))) << "sum k=1..4 k^3 = 100";
         }
     }
@@ -72,9 +70,9 @@ TEST(SeriesSummation, SymbolicSumGeometric) {
     auto result = LMCAS::symbolic_sum(two_pow_k, "k", num(0), n);
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        auto val = result->substitute("n", num(3));
+        auto val = LMCAS::substitute(result, "n", num(3)).value();
         if (val) {
-            val = val->simplify();
+            val = LMCAS::simplify(val).value();
             EXPECT_TRUE(test_expression_text(val, num(15))) << "sum k=0..3 2^k = 15";
         }
     }
@@ -86,7 +84,7 @@ TEST(SeriesSummation, SymbolicSumDirectEval) {
     auto result = LMCAS::symbolic_sum(k_sq, "k", num(1), num(4));
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        result = result->simplify();
+        result = LMCAS::simplify(result).value();
         EXPECT_TRUE(test_expression_text(result, num(30))) << "sum k=1..4 k^2 = 30";
     }
 }
@@ -123,7 +121,7 @@ TEST(SeriesSummation, SymbolicSumLargeExactBounds) {
 
     EXPECT_TRUE((result != nullptr)) << "large-bound summation remains representable";
     if (result) {
-        result = result->simplify();
+        result = LMCAS::simplify(result).value();
         const std::string text = result ? result->to_string() : "";
         EXPECT_TRUE((text.find(lower_value.to_string()) != std::string::npos)) << "large lower bound remains exact after normalization";
         EXPECT_TRUE((text.find(upper_value.to_string()) != std::string::npos)) << "large upper bound remains exact after normalization";
@@ -135,7 +133,7 @@ TEST(SeriesSummation, SymbolicProductFactorial) {
     auto result = LMCAS::symbolic_product(k, "k", num(1), num(5));
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        result = result->simplify();
+        result = LMCAS::simplify(result).value();
         EXPECT_TRUE(test_expression_text(result, num(120))) << "prod k=1..5 k = 120";
     }
 }
@@ -146,7 +144,7 @@ TEST(SeriesSummation, SymbolicProductDirectEval) {
     auto result = LMCAS::symbolic_product(k_plus_1, "k", num(1), num(4));
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        result = result->simplify();
+        result = LMCAS::simplify(result).value();
         EXPECT_TRUE(test_expression_text(result, num(120))) << "prod k=1..4 (k+1) = 120";
     }
 }
@@ -166,7 +164,7 @@ TEST(SeriesSummation, SymbolicProductPochhammer) {
     auto result = LMCAS::symbolic_product(body, "k", num(1), num(4));
     EXPECT_TRUE((result != nullptr)) << "result is not null";
     if (result) {
-        result = result->simplify();
+        result = LMCAS::simplify(result).value();
         EXPECT_TRUE(test_expression_text(result, num(360))) << "prod k=1..4 (k+2) = 360";
     }
 }

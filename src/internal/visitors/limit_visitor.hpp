@@ -31,6 +31,7 @@ class LMCAS_API LimitVisitor : public LMCAS::detail::SymbolicVisitor {
     const LMCAS::AssumptionContext* assumption_ctx_ = nullptr;
     std::optional<ComputationContext> local_context_;
     ComputationContext* context_ = nullptr;
+    detail::RewriteBudget budget_;
     void charge() const {
         if (!context_) return;
         auto step = context_->consume_steps(1, "limit");
@@ -252,10 +253,13 @@ public:
 
     LimitVisitor(std::string v, std::shared_ptr<const SymbolicNode> p, std::string dir = "",
                  const LMCAS::AssumptionContext* ctx = nullptr, ComputationContext* context = nullptr)
-        : var(std::move(v)), point(std::move(p)), direction(std::move(dir)), assumption_ctx_(ctx),
+        : SymbolicVisitor(&budget_), var(std::move(v)), point(std::move(p)),
+          direction(std::move(dir)), assumption_ctx_(ctx),
           local_context_(context ? std::nullopt
               : std::optional<ComputationContext>(std::in_place)),
-          context_(context ? context : &*local_context_) {
+          context_(context ? context : &*local_context_),
+          budget_(*context_, context_->limits().max_recursion_depth,
+                  context_->limits().max_ast_nodes, "limit") {
         if (context_) {
             auto entered = context_->enter_recursion("limit");
             if (!entered) throw entered.error();

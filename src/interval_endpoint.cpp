@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/interval_endpoint.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -171,25 +173,15 @@ std::optional<ComparableEndpoint> parse_quadratic_surd(
 }
 
 Result<ComparableEndpoint> comparable_number(
-    const NumberNode& number, ComputationContext& context,
-    const std::string& operation) {
+    const NumberNode& number, ComputationContext&,
+    const std::string&) {
         if (std::holds_alternative<BigInt>(number.value())) {
             return Result<ComparableEndpoint>::success(ComparableEndpoint{
                 0, Rational(std::get<BigInt>(number.value())),
                 Rational(0), Rational(0)});
         }
-        if (std::holds_alternative<Rational>(number.value())) {
-            return Result<ComparableEndpoint>::success(ComparableEndpoint{
-                0, std::get<Rational>(number.value()), Rational(0), Rational(0)});
-        }
-        auto rational = exact_double_rational(
-            std::get<lmmc_real_t>(number.value()), context, operation);
-        if (!rational) {
-            return Result<ComparableEndpoint>::failure(rational.error());
-        }
-        return Result<ComparableEndpoint>::success(
-            ComparableEndpoint{0, std::move(rational.value()),
-                               Rational(0), Rational(0)});
+        return Result<ComparableEndpoint>::success(ComparableEndpoint{
+            0, std::get<Rational>(number.value()), Rational(0), Rational(0)});
 }
 
 Result<ComparableEndpoint> comparable_surd(
@@ -274,7 +266,9 @@ Result<ComparableEndpoint> unsupported_endpoint(
 
 Result<ComparableEndpoint> comparable_finite_endpoint(
     const Endpoint& endpoint, ComputationContext& context,
-    const std::string& operation) {
+    const std::string& operation) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!endpoint.value || !LMCAS::detail::node(endpoint.value)) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::InvalidArgument,
@@ -282,7 +276,7 @@ Result<ComparableEndpoint> comparable_finite_endpoint(
             operation);
     }
 
-    auto simplified = endpoint.value->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(endpoint.value), transform_budget));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return Result<ComparableEndpoint>::failure(
             CasErrc::InternalInvariant,
@@ -301,6 +295,14 @@ Result<ComparableEndpoint> comparable_finite_endpoint(
         return comparable_root(*root, context, operation);
     }
     return unsupported_endpoint(node, operation);
+} catch (const CasError& error) {
+    return Result<ComparableEndpoint>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<ComparableEndpoint>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<ComparableEndpoint>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<ComparableEndpoint>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 }

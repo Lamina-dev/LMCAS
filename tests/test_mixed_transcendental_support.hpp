@@ -1,9 +1,9 @@
+#include "expr.hpp"
 #pragma once
 
 #include "test_common.hpp"
 #include "solve_mixed_transcendental.hpp"
 #include "solve_strategies.hpp"
-#include "internal/visitors/differentiation_visitor.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +18,7 @@ using namespace LMCAS;
 inline std::optional<double> eval_at(const std::shared_ptr<SymbolicExpr>& expr,
                                      const std::string& var, double val) {
     try {
-        auto substituted = expr->substitute(var, SymbolicExpr::number(val));
+        auto substituted = LMCAS::substitute(expr, var, SymbolicExpr::number(val)).value();
         double result = substituted->to_numeric();
         if (std::isnan(result) || std::isinf(result)) return std::nullopt;
         return result;
@@ -31,11 +31,8 @@ inline std::shared_ptr<SymbolicExpr> compute_derivative(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
     if (!expr || !LMCAS::detail::node(expr)) return nullptr;
     try {
-        DifferentiationVisitor dv(var);
-        LMCAS::detail::node(expr)->accept(dv);
-        auto result_node = dv.get_result();
-        if (!result_node) return nullptr;
-        return LMCAS::detail::make_expression_ptr(result_node);
+        auto derivative = LMCAS::differentiate(expr, var);
+        return derivative ? std::move(derivative.value()) : nullptr;
     } catch (...) {
         return nullptr;
     }

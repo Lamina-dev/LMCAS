@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
 
 namespace LMCAS {
@@ -26,7 +28,9 @@ Result<SymbolicExpr> integrate_multiple_checked(
     const SymbolicExpr& integrand,
     const std::vector<IntegrationStep>& steps,
     Integrator& integrator,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
     if (!validate_integration_steps(steps)) {
         return Result<SymbolicExpr>::failure(
@@ -61,7 +65,7 @@ Result<SymbolicExpr> integrate_multiple_checked(
                 *current, step.variable, *step.lower, *step.upper, context);
             if (!result) return result;
             auto res_ptr = LMCAS::detail::make_expression_ptr(result.value());
-            auto simp = res_ptr->simplify();
+            auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(res_ptr), transform_budget));
             current = simp ? simp : res_ptr;
         }
     }
@@ -69,6 +73,14 @@ Result<SymbolicExpr> integrate_multiple_checked(
     if (!final_access) return Result<SymbolicExpr>::failure(final_access.error());
 
     return Result<SymbolicExpr>::success(*current);
+} catch (const CasError& error) {
+    return Result<SymbolicExpr>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, "allocation failed", "integrate_multiple_checked");
+} catch (const std::length_error& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::ResourceLimit, error.what(), "integrate_multiple_checked");
+} catch (const std::exception& error) {
+    return Result<SymbolicExpr>::failure(CasErrc::InternalInvariant, error.what(), "integrate_multiple_checked");
 }
 
 } // namespace LMCAS

@@ -170,10 +170,10 @@ TEST(LmcasValueCompare, NonfiniteAndApproximateValues) {
     Value approximate_half(static_cast<lmmc_real_t>(0.5));
     auto approximate_symbolic = approximate_half.as_symbolic_checked();
     ASSERT_TRUE(approximate_symbolic);
-    EXPECT_TRUE((approximate_symbolic.value()->compare(SymbolicExpr::number(0.5)) == 0)) << ("finite floating-point Values remain approximate symbolic numbers");
-    EXPECT_TRUE((approximate_symbolic.value()->compare(
-                     SymbolicExpr::number(Rational(1, 2))) != 0))
-        << ("finite floating-point Values are not exactified as rationals");
+    EXPECT_EQ(approximate_symbolic.value()->compare(SymbolicExpr::number(0.5)), 0);
+    EXPECT_EQ(approximate_symbolic.value()->compare(
+                  SymbolicExpr::number(Rational(1, 2))), 0)
+        << "finite floating-point Values become exact decimal rationals";
 }
 
 TEST(LmcasValueCompare, MatrixShapesAndProducts) {

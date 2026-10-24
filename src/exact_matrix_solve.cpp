@@ -155,7 +155,7 @@ Result<ExactLinearSolution> solve_linear_exact(
     return assemble_linear_solution(coefficient_columns, pivot_row,
         [&](std::size_t row, std::size_t column, bool negate) {
             const auto& value = rref.at(row, column);
-            return negate ? exact_negate(value) : value;
+            return negate ? exact_negate(value, context) : value;
         });
 }
 
@@ -186,7 +186,7 @@ Result<std::vector<std::vector<ExprPtr>>> nullspace_exact(
         for (std::size_t row = 0;
              row < eliminated.value().pivot_columns.size(); ++row) {
             vector[eliminated.value().pivot_columns[row]] = exact_negate(
-                eliminated.value().matrix.at(row, free_column));
+                eliminated.value().matrix.at(row, free_column), context);
         }
         basis.push_back(std::move(vector));
     }

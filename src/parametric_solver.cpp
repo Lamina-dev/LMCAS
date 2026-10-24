@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "parametric_solver.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "internal/assumption_facts.hpp"
@@ -10,34 +11,43 @@ namespace LMCAS {
 
 static std::shared_ptr<SymbolicExpr> extract_coefficient(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::string& var)
+    const std::string& var, ComputationContext& context)
 {
 
-    return expr->differentiate(var)->simplify();
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+
+    return detail::make_expression_ptr(detail::differentiate_node(detail::node(expr), var, transform_budget));
 }
 
 static std::shared_ptr<SymbolicExpr> extract_constant_term(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::vector<std::string>& unknowns)
+    const std::vector<std::string>& unknowns, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
 
 
     auto constant = expr;
     for (const auto& var : unknowns) {
-        constant = constant->substitute(var, SymbolicExpr::number(0));
+        constant = detail::make_expression_ptr(detail::substitute_node(detail::node(constant), var, detail::node(SymbolicExpr::number(0)), transform_budget));
     }
-    return constant->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(constant), transform_budget));
 }
 
 bool ParametricSolver::is_linear_in_unknowns(
     const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
-    const std::vector<std::string>& unknowns)
+    const std::vector<std::string>& unknowns, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     for (const auto& eq : equations) {
         for (const auto& var : unknowns) {
 
-            auto first_deriv = eq->differentiate(var)->simplify();
-            auto second_deriv = first_deriv->differentiate(var)->simplify();
+            auto first_deriv = detail::make_expression_ptr(detail::differentiate_node(detail::node(eq), var, transform_budget));
+            auto second_deriv = detail::make_expression_ptr(detail::differentiate_node(detail::node(first_deriv), var, transform_budget));
             if (!second_deriv->is_zero()) {
                 return false;
             }
@@ -46,7 +56,7 @@ bool ParametricSolver::is_linear_in_unknowns(
                 if (other_var == var) {
                     continue;
                 }
-                auto mixed = first_deriv->differentiate(other_var)->simplify();
+                auto mixed = detail::make_expression_ptr(detail::differentiate_node(detail::node(first_deriv), other_var, transform_budget));
                 if (!mixed->is_zero()) {
                     return false;
                 }
@@ -89,8 +99,10 @@ static bool parametric_zero(const std::shared_ptr<SymbolicExpr>& expression,
 
 static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t column,
                                     ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     while (row < matrix.size()) {
-        auto simplified = matrix[row][column]->simplify();
+        auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(matrix[row][column]), transform_budget));
         matrix[row][column] = simplified;
         if (!parametric_zero(simplified, context)) {
             break;
@@ -101,7 +113,10 @@ static size_t find_parametric_pivot(ParametricMatrix& matrix, size_t row, size_t
 }
 
 static void eliminate_parametric_column(ParametricMatrix& A, ParametricVector& b,
-                                        size_t current_row, size_t col, size_t n) {
+                                        size_t current_row, size_t col, size_t n, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     size_t m = A.size();
     auto pivot = A[current_row][col];
 
@@ -109,20 +124,20 @@ static void eliminate_parametric_column(ParametricMatrix& A, ParametricVector& b
         if (r == current_row) {
             continue;
         }
-        auto entry = A[r][col]->simplify();
+        auto entry = detail::make_expression_ptr(detail::normalize_node(detail::node(A[r][col]), transform_budget));
         if (entry->is_zero()) {
             continue;
         }
 
-        auto factor = SymbolicExpr::divide(entry, pivot)->simplify();
+        auto factor = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(entry, pivot)), transform_budget));
 
         for (size_t k = col; k < n; ++k) {
             auto term = SymbolicExpr::multiply(factor, A[current_row][k]);
-            A[r][k] = SymbolicExpr::add(A[r][k], SymbolicExpr::multiply(term, SymbolicExpr::number(-1)))->simplify();
+            A[r][k] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(A[r][k], SymbolicExpr::multiply(term, SymbolicExpr::number(-1)))), transform_budget));
         }
 
         auto b_term = SymbolicExpr::multiply(factor, b[current_row]);
-        b[r] = SymbolicExpr::add(b[r], SymbolicExpr::multiply(b_term, SymbolicExpr::number(-1)))->simplify();
+        b[r] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(b[r], SymbolicExpr::multiply(b_term, SymbolicExpr::number(-1)))), transform_budget));
     }
 }
 
@@ -130,6 +145,8 @@ static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_so
     const ParametricMatrix& A, const ParametricVector& b,
     const std::vector<size_t>& pivot_cols, const std::vector<size_t>& pivot_rows,
     const std::vector<std::string>& unknowns, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     size_t n = unknowns.size();
     std::map<std::string, std::shared_ptr<SymbolicExpr>> solution;
 
@@ -151,7 +168,7 @@ static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_so
             if (pivot_col_set.find(j) != pivot_col_set.end()) {
                 continue;
             }
-            auto coeff = A[row][j]->simplify();
+            auto coeff = detail::make_expression_ptr(detail::normalize_node(detail::node(A[row][j]), transform_budget));
             if (!parametric_zero(coeff, context)) {
 
                 auto term = SymbolicExpr::multiply(coeff, SymbolicExpr::variable(unknowns[j]));
@@ -160,7 +177,7 @@ static std::map<std::string, std::shared_ptr<SymbolicExpr>> parametric_linear_so
         }
 
         auto pivot_val = A[row][col];
-        value = SymbolicExpr::divide(value, pivot_val)->simplify();
+        value = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(value, pivot_val)), transform_budget));
 
         solution[unknowns[col]] = value;
     }
@@ -173,6 +190,8 @@ ParametricSolver::solve_linear_parametric(
     const std::vector<std::string>& unknowns,
     ComputationContext& context)
 {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     size_t m = equations.size();
     size_t n = unknowns.size();
 
@@ -190,11 +209,11 @@ ParametricSolver::solve_linear_parametric(
 
     for (size_t i = 0; i < m; ++i) {
         for (size_t j = 0; j < n; ++j) {
-            A[i][j] = extract_coefficient(equations[i], unknowns[j]);
+            A[i][j] = extract_coefficient(equations[i], unknowns[j], context);
         }
 
-        auto constant = extract_constant_term(equations[i], unknowns);
-        b[i] = SymbolicExpr::multiply(constant, SymbolicExpr::number(-1))->simplify();
+        auto constant = extract_constant_term(equations[i], unknowns, context);
+        b[i] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(constant, SymbolicExpr::number(-1))), transform_budget));
     }
 
     std::vector<size_t> pivot_cols;
@@ -213,7 +232,7 @@ ParametricSolver::solve_linear_parametric(
             std::swap(b[pivot_row], b[current_row]);
         }
 
-        eliminate_parametric_column(A, b, current_row, col, n);
+        eliminate_parametric_column(A, b, current_row, col, n, context);
 
         pivot_cols.push_back(col);
         pivot_rows.push_back(current_row);
@@ -221,7 +240,7 @@ ParametricSolver::solve_linear_parametric(
     }
 
     for (size_t r = current_row; r < m; ++r) {
-        auto b_simplified = b[r]->simplify();
+        auto b_simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(b[r]), transform_budget));
         if (!parametric_zero(b_simplified, context)) {
 
             return {};
@@ -252,7 +271,7 @@ ParametricSolver::solve_polynomial_parametric_checked(
         return ParametricSolutionsResult::failure(budget.error());
     }
     try {
-        if (is_linear_in_unknowns(equations, unknowns))
+        if (is_linear_in_unknowns(equations, unknowns, context))
             return solve_linear_parametric(equations, unknowns, context);
         return solve_polynomial_parametric_impl(
             equations, unknowns, parameters, context);
@@ -292,7 +311,7 @@ ParametricSolver::solve_system(
 
 
     ComputationContext context;
-    if (is_linear_in_unknowns(equations, unknowns)) {
+    if (is_linear_in_unknowns(equations, unknowns, context)) {
         return solve_linear_parametric(equations, unknowns, context);
     }
     auto solved = solve_polynomial_parametric_checked(

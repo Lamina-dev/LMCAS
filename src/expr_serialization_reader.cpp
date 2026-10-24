@@ -2,9 +2,6 @@
 #include "internal/expr_serialization_common.hpp"
 
 #include <charconv>
-#include <cmath>
-#include <cstdint>
-#include <cstring>
 #include <limits>
 #include <new>
 #include <stdexcept>
@@ -27,6 +24,7 @@ public:
     }
 
 private:
+    std::size_t nodes_ = 0;
     [[noreturn]] void invalid(const char* message) const {
         throw CasError{CasErrc::ParseError, message, kDecode};
     }
@@ -138,24 +136,6 @@ private:
         for (std::size_t i = 0; i < n; ++i) result.push_back(node());
         return result;
     }
-    int hex_digit(char c) const {
-        if (c >= '0' && c <= '9') return c - '0';
-        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-        invalid("invalid binary64 bits");
-    }
-    NodePtr binary64() {
-        auto text = field();
-        if (text.size() != 16) invalid("invalid binary64 bits");
-        std::uint64_t bits = 0;
-        for (char c : text) {
-            const auto digit = hex_digit(c);
-            bits = bits * 16 + static_cast<unsigned>(digit);
-        }
-        double value;
-        std::memcpy(&value, &bits, sizeof(value));
-        if (!std::isfinite(value)) invalid("nonfinite binary64 value");
-        return detail::make_node<NumberNode>(value);
-    }
     NodePtr matrix() {
         auto rows = unsigned_field(), cols = unsigned_field();
         if (!rows || !cols || rows > std::numeric_limits<std::size_t>::max() / cols ||
@@ -205,11 +185,13 @@ private:
     }
     NodePtr node() {
         Recursion depth(context_, kDecode);
-        check(context_.reserve_nodes(1, kDecode));
+        if (nodes_ == std::numeric_limits<std::size_t>::max()) {
+            throw CasError{CasErrc::ResourceLimit, "AST node count overflow", kDecode};
+        }
+        check(context_.require_ast_nodes(++nodes_, kDecode));
         auto kind = field();
         if (kind == "integer") return detail::make_node<NumberNode>(integer());
         if (kind == "rational") return detail::make_node<NumberNode>(rational());
-        if (kind == "binary64") return binary64();
         if (kind == "symbol") {
             auto name = field();
             return detail::make_node<VariableNode>(std::string(name));

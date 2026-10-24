@@ -1,3 +1,4 @@
+#include "computation_context.hpp"
 #pragma once
 
 #include "solve_transcendental.hpp"
@@ -33,20 +34,23 @@ struct ExpBasePattern {
     std::shared_ptr<SymbolicExpr> rhs;
 };
 
-bool try_evaluate_numeric(const std::shared_ptr<SymbolicExpr>& expr, lmmc_real_t& out);
+bool try_evaluate_numeric(const std::shared_ptr<SymbolicExpr>& expr, lmmc_real_t& out,
+                          ComputationContext& context);
 std::optional<InversePattern> decompose_trig_exp_pattern(
     const std::shared_ptr<SymbolicExpr>& expr, const std::string& var);
 std::optional<LambertWPattern> decompose_lambert_w_pattern(
-    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var);
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, ComputationContext& context);
 std::optional<ExpBasePattern> decompose_exp_base_pattern(
-    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var);
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
+    ComputationContext& context);
 SolveResult invert_function(
     const InversePattern& pattern, const ExprPtr& original, const std::string& var,
     ComputationContext& context, const SolveOptions& options);
 SolutionSet conditional_preimage(const ExprPtr& original, const std::string& var);
 std::vector<std::shared_ptr<SymbolicExpr>> invert_lambert_w(
-    const std::shared_ptr<SymbolicExpr>& c);
+    const std::shared_ptr<SymbolicExpr>& c, ComputationContext& context);
 std::vector<std::shared_ptr<SymbolicExpr>> invert_exp_base(
-    const std::shared_ptr<SymbolicExpr>& base, const std::shared_ptr<SymbolicExpr>& c);
+    const std::shared_ptr<SymbolicExpr>& base, const std::shared_ptr<SymbolicExpr>& c,
+    ComputationContext& context);
 
 }

@@ -63,11 +63,11 @@ Result<ExprPtr> determinant_cofactor(
             return Result<ExprPtr>::failure(minor_determinant.error());
         }
         auto term = exact_multiply(
-            matrix.at(0, column), minor_determinant.value());
-        if (column % 2 != 0) term = exact_negate(term);
-        sum = exact_add(sum, term);
+            matrix.at(0, column), minor_determinant.value(), context);
+        if (column % 2 != 0) term = exact_negate(term, context);
+        sum = exact_add(sum, term, context);
     }
-    return Result<ExprPtr>::success(simplify_expr(sum));
+    return Result<ExprPtr>::success(simplify_expr(sum, context));
 }
 
 Result<ExprPtr> symbolic_determinant_value(
@@ -97,17 +97,17 @@ Result<ExprPtr> symbolic_determinant_value(
         for (std::size_t row = column + 1; row < n; ++row) {
             for (std::size_t target = column + 1; target < n; ++target) {
                 auto numerator = exact_subtract(
-                    exact_multiply(matrix.at(row, target), pivot_value),
-                    exact_multiply(matrix.at(row, column), matrix.at(column, target)));
-                matrix.at(row, target) = exact_divide(numerator, previous);
+                    exact_multiply(matrix.at(row, target), pivot_value, context),
+                    exact_multiply(matrix.at(row, column), matrix.at(column, target), context), context);
+                matrix.at(row, target) = exact_divide(numerator, previous, context);
             }
             matrix.at(row, column) = SymbolicExpr::number(0);
         }
         previous = pivot_value;
     }
     auto determinant = matrix.at(n - 1, n - 1);
-    if (swaps % 2 != 0) determinant = exact_negate(determinant);
-    return Result<ExprPtr>::success(simplify_expr(determinant));
+    if (swaps % 2 != 0) determinant = exact_negate(determinant, context);
+    return Result<ExprPtr>::success(simplify_expr(determinant, context));
 }
 
 }
@@ -122,13 +122,6 @@ Result<ExprPtr> determinant_exact(
         return Result<ExprPtr>::failure(
             CasErrc::InvalidArgument,
             "determinant requires a square matrix", operation);
-    }
-    for (const auto& entry : input.entries) {
-        if (contains_approximate_number(entry)) {
-            return Result<ExprPtr>::failure(
-                CasErrc::Inconclusive,
-                "exact determinant rejects approximate entries", operation);
-        }
     }
     bool all_rational = true;
     for (const auto& entry : input.entries) {

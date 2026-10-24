@@ -44,65 +44,93 @@ std::shared_ptr<const SymbolicNode> combine_integration_exponentials(
 }
 }
 
-Result<std::shared_ptr<SymbolicExpr>> Integrator::apply_linearity(
+static detail::SymbolicNodePtr scale_integral_field(
+    const detail::SymbolicNodePtr& value, const detail::SymbolicNodePtr& coefficient,
+    detail::RewriteBudget& budget) {
+    detail::RewriteScope scope(&budget);
+    if (const auto* piecewise = dynamic_cast<const PiecewiseNode*>(value.get())) {
+        std::vector<PiecewiseNode::Branch> branches;
+        branches.reserve(piecewise->branches().size());
+        for (const auto& branch : piecewise->branches()) {
+            branches.push_back({scale_integral_field(branch.expression, coefficient, budget),
+                branch.condition});
+        }
+        auto fallback = piecewise->default_expr()
+            ? scale_integral_field(piecewise->default_expr(), coefficient, budget) : nullptr;
+        auto result = detail::make_node<PiecewiseNode>(std::move(branches), fallback);
+        budget.measure(result);
+        return result;
+    }
+    return detail::normalize_node(
+        SymbolicFactory::create_multiply({coefficient, value}, &budget), budget);
+}
+
+static bool zero_remainder(const detail::SymbolicNodePtr& value, detail::RewriteBudget& budget) {
+    detail::RewriteScope scope(&budget);
+    if (value->is_zero()) { return true; }
+    const auto* piecewise = dynamic_cast<const PiecewiseNode*>(value.get());
+    if (!piecewise) { return false; }
+    for (const auto& branch : piecewise->branches()) {
+        if (!zero_remainder(branch.expression, budget)) { return false; }
+    }
+    return !piecewise->default_expr() || zero_remainder(piecewise->default_expr(), budget);
+}
+
+Result<std::optional<detail::IntegralParts>> Integrator::apply_linearity(
     const SymbolicExpr& expr, const std::string& var,
     ComputationContext& context, int depth) {
-
-    if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
-        std::vector<std::shared_ptr<const SymbolicNode>> constants;
-        std::vector<std::shared_ptr<const SymbolicNode>> dependents;
-
-        for (auto& op : mul->operands()) {
-            auto term = LMCAS::detail::expression_from_node(op);
-            if (!depends_on_integration_variable(term, var)) {
-                constants.push_back(op);
-            } else {
-                dependents.push_back(op);
+    using Attempt = Result<std::optional<detail::IntegralParts>>;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+        context.limits().max_ast_nodes, "integrate.linearity");
+    if (const auto* add = dynamic_cast<const AddNode*>(detail::node(expr).get())) {
+        std::vector<detail::SymbolicNodePtr> primitives, remainders;
+        for (const auto& operand : add->operands()) {
+            auto term = detail::expression_from_node(operand);
+            auto parts = integrate_recursive(term, var, context, depth + 1, &term);
+            if (!parts) { return Attempt::failure(parts.error()); }
+            primitives.push_back(detail::node(parts.value().primitive));
+            if (!zero_remainder(detail::node(parts.value().remainder), budget)) {
+                remainders.push_back(detail::node(parts.value().remainder));
             }
         }
-
+        const auto remainder = remainders.empty() ? detail::node(zero_)
+            : remainders.size() == 1 ? remainders.front()
+            : detail::normalize_node(
+                SymbolicFactory::create_add(std::move(remainders), &budget), budget);
+        return Attempt::success(detail::IntegralParts{
+            detail::expression_from_node(detail::normalize_node(
+                SymbolicFactory::create_add(std::move(primitives), &budget), budget)),
+            detail::expression_from_node(remainder)});
+    }
+    if (const auto* mul = dynamic_cast<const MultiplyNode*>(detail::node(expr).get())) {
+        std::vector<detail::SymbolicNodePtr> constants, dependents;
+        for (const auto& operand : mul->operands()) {
+            if (detail::integration_depends_on_variable(operand, var, &budget)) {
+                dependents.push_back(operand);
+            }
+            else { constants.push_back(operand); }
+        }
         auto exponential = combine_integration_exponentials(dependents);
         if (!constants.empty() || exponential) {
-            SymbolicExpr dep_part = exponential
-                ? detail::expression_from_node(exponential)
+            auto dependent = exponential ? detail::expression_from_node(exponential)
                 : dependents.empty() ? *SymbolicExpr::number(1)
-                : dependents.size() == 1 ? detail::expression_from_node(dependents[0])
+                : dependents.size() == 1 ? detail::expression_from_node(dependents.front())
                 : detail::expression_from_node(detail::make_node<MultiplyNode>(dependents));
-
-            auto int_part = integrate_recursive(dep_part, var, context, depth + 1);
-            if (!int_part) {
-                return Result<std::shared_ptr<SymbolicExpr>>::failure(
-                    int_part.error());
-            }
-            if (constants.empty()) { return int_part; }
-            auto const_part = constants.size() == 1
-                ? detail::expression_from_node(constants[0])
-                : detail::expression_from_node(detail::make_node<MultiplyNode>(constants));
-            return Result<std::shared_ptr<SymbolicExpr>>::success(
-                SymbolicExpr::multiply(
-                    LMCAS::detail::make_expression_ptr(const_part),
-                    int_part.value()));
+            auto parts = integrate_recursive(dependent, var, context, depth + 1, &dependent);
+            if (!parts) { return Attempt::failure(parts.error()); }
+            if (constants.empty()) { return Attempt::success(std::move(parts.value())); }
+            auto coefficient = constants.size() == 1 ? constants.front()
+                : detail::make_node<MultiplyNode>(std::move(constants));
+            coefficient = detail::normalize_node(coefficient, budget);
+            auto scale = [&](const SymbolicExpr& value) {
+                return detail::expression_from_node(scale_integral_field(
+                    detail::node(value), coefficient, budget));
+            };
+            return Attempt::success(detail::IntegralParts{
+                scale(parts.value().primitive), scale(parts.value().remainder)});
         }
     }
-
-    if (auto add = std::dynamic_pointer_cast<const AddNode>(
-            LMCAS::detail::node(expr))) {
-        std::vector<std::shared_ptr<const SymbolicNode>> results;
-        for (auto& op : add->operands()) {
-            auto term = LMCAS::detail::expression_from_node(op);
-            auto int_term = integrate_recursive(
-                term, var, context, depth + 1);
-            if (!int_term) {
-                return Result<std::shared_ptr<SymbolicExpr>>::failure(
-                    int_term.error());
-            }
-            results.push_back(LMCAS::detail::node(int_term.value()));
-        }
-        return Result<std::shared_ptr<SymbolicExpr>>::success(
-            LMCAS::detail::make_expression_ptr(
-                LMCAS::detail::make_node<AddNode>(results)));
-    }
-    return Result<std::shared_ptr<SymbolicExpr>>::success(nullptr);
+    return Attempt::success(std::nullopt);
 }
 
 }

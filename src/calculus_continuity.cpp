@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "internal/calculus_utils_support.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -69,8 +71,10 @@ ContinuityResult classify_continuity_point_value(
 
 ContinuityResult continuity_with_limit(
     const ExprPtr& f, const std::string& var, const ExprPtr& point,
-    const ExprPtr& limit, ComputationContext& context) {
-    auto value = f->substitute(var, point);
+    const ExprPtr& limit, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto value = detail::make_expression_ptr(detail::substitute_node(detail::node(f), var, detail::node(point), transform_budget));
     if (!value) {
         return ContinuityResult::failure(CasErrc::InternalInvariant,
             "substitution produced no value", "continuity_at");
@@ -82,6 +86,14 @@ ContinuityResult continuity_with_limit(
     if (!selected) { return ContinuityResult::failure(selected.error()); }
     if (!selected.value()) { return ContinuityResult::success(ContinuityType::Removable); }
     return classify_continuity_point_value(limit, selected.value(), facts, context);
+} catch (const CasError& error) {
+    return ContinuityResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ContinuityResult::failure(CasErrc::ResourceLimit, "allocation failed", "continuity_with_limit");
+} catch (const std::length_error& error) {
+    return ContinuityResult::failure(CasErrc::ResourceLimit, error.what(), "continuity_with_limit");
+} catch (const std::exception& error) {
+    return ContinuityResult::failure(CasErrc::InternalInvariant, error.what(), "continuity_with_limit");
 }
 
 ContinuityResult continuity_from_limits(

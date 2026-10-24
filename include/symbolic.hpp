@@ -30,6 +30,11 @@ class AssumptionContext;
 /** Result of an operation that produces a symbolic expression. */
 using ExpressionResult = Result<std::shared_ptr<SymbolicExpr>>;
 
+struct Binding {
+    std::shared_ptr<SymbolicExpr> symbol;
+    std::shared_ptr<SymbolicExpr> value;
+};
+
 /** @brief Stable relational operator used by public APIs. */
 enum class RelationOp {
     EQ,
@@ -78,19 +83,6 @@ public:
      */
     int compare(const std::shared_ptr<SymbolicExpr>& other) const;
 
-    /**
-     * @brief 将表达式中指定变量替换为给定值.
-     * @param var_name 变量名
-     * @param value 替换值
-     * @return 替换后的新表达式
-     */
-    std::shared_ptr<SymbolicExpr> substitute(const std::string& var_name, const std::shared_ptr<SymbolicExpr>& value) const;
-
-    /**
-     * @brief 展开表达式(分配律展开乘法等).
-     * @return 展开后的表达式
-     */
-    std::shared_ptr<SymbolicExpr> expand() const;
 
     /** @brief 判断表达式是否为零. */
     bool is_zero() const;
@@ -136,13 +128,6 @@ public:
         const std::vector<std::shared_ptr<SymbolicExpr>>& equations,
         const std::vector<std::string>& unknowns,
         const std::vector<std::string>& parameters);
-
-    /**
-     * @brief 计算不定积分.
-     * @param var 积分变量名
-     * @return 积分结果表达式
-     */
-    std::shared_ptr<SymbolicExpr> integrate(const std::string& var) const;
 
     /**
      * @brief 在指定点展开为泰勒级数.
@@ -211,11 +196,6 @@ public:
                                !std::is_same_v<Integer, int>, int> = 0>
     static std::shared_ptr<SymbolicExpr> number(Integer) = delete;
 
-    /**
-     * @brief 创建浮点数值表达式.
-     * @param n 浮点值
-     * @return 数值表达式
-     */
     static std::shared_ptr<SymbolicExpr> number(double n);
 
     /**
@@ -346,14 +326,6 @@ public:
 	static std::shared_ptr<SymbolicExpr> eq(std::shared_ptr<SymbolicExpr> lhs, std::shared_ptr<SymbolicExpr> rhs);
 
     /**
-     * @brief 计算表达式关于指定变量的不定积分.
-     * @param op 被积表达式
-     * @param var 积分变量名
-     * @return 积分结果
-     */
-    static std::shared_ptr<SymbolicExpr> integral(std::shared_ptr<SymbolicExpr> op, const std::string& var);
-
-    /**
      * @brief 从二维元素列表创建矩阵表达式.
      * @param elements 二维表达式数组,elements[i][j] 为第 i 行第 j 列元素
      * @return 矩阵表达式
@@ -368,23 +340,10 @@ public:
     static std::shared_ptr<SymbolicExpr> variable(const std::string& name);
 
     /**
-     * @brief 对表达式进行化简.
-     * @return 化简后的表达式
-     */
-    std::shared_ptr<SymbolicExpr> simplify() const;
-
-    /**
      * @brief 对表达式进行三角恒等式化简.
      * @return 化简后的表达式
      */
     std::shared_ptr<SymbolicExpr> simplify_trig() const;
-
-    /**
-     * @brief 对表达式关于指定变量求导.
-     * @param var_name 求导变量名
-     * @return 导数表达式
-     */
-    std::shared_ptr<SymbolicExpr> differentiate(const std::string& var_name) const;
 
     /**
      * @brief 将表达式转换为可读字符串.

@@ -99,17 +99,8 @@ std::optional<int> LimitVisitor::get_node_sign(
     if (node->is_zero()) {
         return 0;
     }
-    if (auto number = std::dynamic_pointer_cast<const NumberNode>(node)) {
-        if (std::holds_alternative<double>(number->value())) {
-            if (!std::isfinite(std::get<double>(number->value()))) { return std::nullopt; }
-            return get_sign(node);
-        }
-        if (std::holds_alternative<BigInt>(number->value())) {
-            return get_sign(node);
-        }
-        if (std::holds_alternative<Rational>(number->value())) {
-            return get_sign(node);
-        }
+    if (std::dynamic_pointer_cast<const NumberNode>(node)) {
+        return get_sign(node);
     }
     if (is_inf(node)) {
         return is_neg_inf(node) ? -1 : 1;
@@ -118,9 +109,6 @@ std::optional<int> LimitVisitor::get_node_sign(
 }
 
 double LimitVisitor::get_numeric_value(const std::shared_ptr<const NumberNode>& num) const {
-    if (std::holds_alternative<double>(num->value())) {
-        return std::get<double>(num->value());
-    }
     if (std::holds_alternative<BigInt>(num->value())) {
         return std::get<BigInt>(num->value()).to_double();
     }

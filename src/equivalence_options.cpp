@@ -24,10 +24,7 @@ bool exact_integer_node(const std::shared_ptr<const SymbolicNode>& node,
     if (std::holds_alternative<BigInt>(number->value())) {
         return std::get<BigInt>(number->value()) == BigInt(expected);
     }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value()) == Rational(expected);
-    }
-    return false;
+    return std::get<Rational>(number->value()) == Rational(expected);
 }
 
 }

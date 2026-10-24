@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_vector_geometry.hpp"
 #include <cfloat>
@@ -21,7 +22,7 @@ TEST(SymbolicVectorGeometryLinePlane, IntersectionPoint) {
     auto result = LMCAS::line_plane_intersection_checked(line, plane).value();
     EXPECT_TRUE((result.size() == 3)) << "intersection has 3 coordinates";
     for (int i = 0; i < 3; ++i) {
-        auto s = result[i] ? result[i]->simplify() : nullptr;
+        auto s = result[i] ? LMCAS::simplify(result[i]).value() : nullptr;
         EXPECT_TRUE(test_expression_text((s), ("1"))) << "intersection coord " + std::to_string(i) + " is 1";
     }
 }
@@ -100,7 +101,7 @@ TEST(SymbolicVectorGeometryLinePlane, PointPlaneKnownDistance) {
     plane.d = zero;
 
     auto result = LMCAS::point_plane_distance_checked(point, plane).value();
-    auto val = test_numeric_eval(result ? result->simplify() : nullptr);
+    auto val = test_numeric_eval(result ? LMCAS::simplify(result).value() : nullptr);
     double expected = 6.0 / std::sqrt(3.0);
     ASSERT_TRUE((val.has_value())) << "point-plane distance is numeric";
     if (val) {
@@ -160,7 +161,7 @@ TEST(SymbolicVectorGeometryLinePlane, SkewKnownDistance) {
     l2.direction = {zero, zero, one};
 
     auto result = LMCAS::skew_lines_distance_checked(l1, l2).value();
-    auto simplified = result ? result->simplify() : nullptr;
+    auto simplified = result ? LMCAS::simplify(result).value() : nullptr;
     auto val = test_numeric_eval(simplified);
     if (val) {
         EXPECT_TRUE((std::abs(*val - 1.0) < 1e-9)) << "skew lines distance is 1";
@@ -216,7 +217,7 @@ TEST(SymbolicVectorGeometryLinePlane, DihedralPerpendicular) {
     LMCAS::PlaneSymbolic p1{{SymbolicExpr::number(1), SymbolicExpr::number(0), SymbolicExpr::number(0)}, SymbolicExpr::number(0)};
     LMCAS::PlaneSymbolic p2{{SymbolicExpr::number(0), SymbolicExpr::number(1), SymbolicExpr::number(0)}, SymbolicExpr::number(0)};
     auto ang = LMCAS::dihedral_angle_checked(p1, p2).value();
-    auto v = test_numeric_eval(ang ? ang->simplify() : nullptr);
+    auto v = test_numeric_eval(ang ? LMCAS::simplify(ang).value() : nullptr);
     EXPECT_TRUE((v.has_value() && std::abs(*v - LMMC_CONST_PI / 2.0) < 1e-6)) << "dihedral angle of perpendicular planes is pi/2";
 }
 
@@ -247,7 +248,7 @@ TEST(SymbolicVectorGeometryLinePlane, IntersectionCheckedValue) {
     ASSERT_TRUE((intersection.has_value())) << "checked line_plane_intersection succeeds";
     if (intersection) {
         EXPECT_TRUE((intersection.value().size() == 3)) << "checked intersection has three coordinates";
-        EXPECT_TRUE(test_expression_text((intersection.value()[0]->simplify()), ("1"))) << "checked intersection x = 1";
+        EXPECT_TRUE(test_expression_text((LMCAS::simplify(intersection.value()[0]).value()), ("1"))) << "checked intersection x = 1";
     }
 }
 
@@ -304,7 +305,7 @@ TEST(SymbolicVectorGeometryLinePlane, SkewCheckedValue) {
     auto skew = LMCAS::skew_lines_distance_checked(l1, l2);
     ASSERT_TRUE((skew.has_value())) << "checked skew_lines_distance succeeds";
     if (skew) {
-        auto value = test_numeric_eval(skew.value()->simplify());
+        auto value = test_numeric_eval(LMCAS::simplify(skew.value()).value());
         EXPECT_TRUE((value.has_value() && std::abs(*value - 1.0) < 1e-9)) << "checked skew distance is 1";
     }
 }
@@ -335,7 +336,7 @@ TEST(SymbolicVectorGeometryLinePlane, DihedralCheckedValue) {
         LMCAS::PlaneSymbolic{{zero, one, zero}, zero});
     ASSERT_TRUE((angle.has_value())) << "checked dihedral_angle succeeds";
     if (angle) {
-        auto value = test_numeric_eval(angle.value()->simplify());
+        auto value = test_numeric_eval(LMCAS::simplify(angle.value()).value());
         EXPECT_TRUE((value.has_value() && std::abs(*value - LMMC_CONST_PI / 2.0) < 1e-6)) << "checked dihedral angle is pi/2";
     }
 }

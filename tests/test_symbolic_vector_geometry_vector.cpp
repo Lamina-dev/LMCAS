@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_vector_geometry.hpp"
 #include <cfloat>
@@ -11,7 +12,7 @@ TEST(SymbolicVectorGeometryVector, DotOrthogonal) {
     std::vector<std::shared_ptr<SymbolicExpr>> a = {one, zero, zero};
     std::vector<std::shared_ptr<SymbolicExpr>> b = {zero, one, zero};
     auto result = LMCAS::vector_dot(a, b);
-    auto simplified = result ? result->simplify() : nullptr;
+    auto simplified = result ? LMCAS::simplify(result).value() : nullptr;
     EXPECT_TRUE(test_expression_text((simplified), ("0"))) << "orthogonal dot product is 0";
 }
 
@@ -19,7 +20,7 @@ TEST(SymbolicVectorGeometryVector, DotParallel) {
     auto result = LMCAS::vector_dot(
         {SymbolicExpr::number(1), SymbolicExpr::number(2), SymbolicExpr::number(3)},
         {SymbolicExpr::number(2), SymbolicExpr::number(4), SymbolicExpr::number(6)});
-    auto simplified = result ? result->simplify() : nullptr;
+    auto simplified = result ? LMCAS::simplify(result).value() : nullptr;
     EXPECT_TRUE(test_expression_text((simplified), ("28"))) << "parallel dot product is 28";
 }
 
@@ -27,7 +28,7 @@ TEST(SymbolicVectorGeometryVector, DotGeneral) {
     auto result = LMCAS::vector_dot(
         {SymbolicExpr::number(1), SymbolicExpr::number(0), SymbolicExpr::number(2)},
         {SymbolicExpr::number(3), SymbolicExpr::number(4), SymbolicExpr::number(1)});
-    auto simplified = result ? result->simplify() : nullptr;
+    auto simplified = result ? LMCAS::simplify(result).value() : nullptr;
     EXPECT_TRUE(test_expression_text((simplified), ("5"))) << "general dot product is 5";
 }
 
@@ -37,7 +38,7 @@ TEST(SymbolicVectorGeometryVector, CrossParallel) {
         {SymbolicExpr::number(2), SymbolicExpr::number(4), SymbolicExpr::number(6)});
     EXPECT_TRUE((result.size() == 3)) << "cross product has 3 components";
     for (int i = 0; i < 3; ++i) {
-        auto s = result[i] ? result[i]->simplify() : nullptr;
+        auto s = result[i] ? LMCAS::simplify(result[i]).value() : nullptr;
         EXPECT_TRUE(test_expression_text((s), ("0"))) << "parallel cross component " + std::to_string(i) + " is 0";
     }
 }
@@ -53,7 +54,7 @@ TEST(SymbolicVectorGeometryVector, CrossBasis) {
     for (size_t component = 0; component < result.size(); ++component) {
         SCOPED_TRACE(component);
         ASSERT_TRUE(result[component]);
-        const auto simplified = result[component]->simplify();
+        const auto simplified = LMCAS::simplify(result[component]).value();
         ASSERT_TRUE(simplified);
         EXPECT_EQ(simplified->to_string(), expected[component]) << "i x j = k";
     }
@@ -68,7 +69,7 @@ TEST(SymbolicVectorGeometryVector, CrossGeneral) {
     for (size_t component = 0; component < result.size(); ++component) {
         SCOPED_TRACE(component);
         ASSERT_TRUE(result[component]);
-        const auto simplified = result[component]->simplify();
+        const auto simplified = LMCAS::simplify(result[component]).value();
         ASSERT_TRUE(simplified);
         EXPECT_EQ(simplified->to_string(), expected[component])
             << "(1,2,3) x (4,5,6) = (-3,6,-3)";
@@ -106,7 +107,7 @@ TEST(SymbolicVectorGeometryVector, DotCheckedValue) {
     auto dot = LMCAS::vector_dot_checked({one, zero}, {zero, one});
     ASSERT_TRUE((dot.has_value())) << "checked vector_dot succeeds";
     if (dot) {
-        EXPECT_TRUE(test_expression_text((dot.value()->simplify()), ("0"))) << "checked dot product of orthogonal vectors is 0";
+        EXPECT_TRUE(test_expression_text((LMCAS::simplify(dot.value()).value()), ("0"))) << "checked dot product of orthogonal vectors is 0";
     }
 }
 

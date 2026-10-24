@@ -51,14 +51,14 @@ TEST(VectorCalculusJacobianHessian, JacobianSquare) {
     EXPECT_TRUE((get_mat_cols(J) == 2)) << "Jacobian has 2 columns";
 
     auto j00 = get_mat_entry(J, 0, 0);
-    auto j00_at = j00->substitute("x", SymbolicExpr::number(3));
-    j00_at = j00_at->simplify();
+    auto j00_at = LMCAS::substitute(j00, "x", SymbolicExpr::number(3)).value();
+    j00_at = LMCAS::simplify(j00_at).value();
     auto v00 = test_numeric_eval(j00_at);
     EXPECT_TRUE((v00.has_value() && std::abs(*v00 - 6.0) < 1e-10)) << "J[0][0] = 2x => 6 at x=3";
 
     auto j01 = get_mat_entry(J, 0, 1);
-    auto j01_at = j01->substitute("y", SymbolicExpr::number(5));
-    j01_at = j01_at->simplify();
+    auto j01_at = LMCAS::substitute(j01, "y", SymbolicExpr::number(5)).value();
+    j01_at = LMCAS::simplify(j01_at).value();
     auto v01 = test_numeric_eval(j01_at);
     EXPECT_TRUE((v01.has_value() && std::abs(*v01 - 10.0) < 1e-10)) << "J[0][1] = 2y => 10 at y=5";
 
@@ -91,8 +91,8 @@ TEST(VectorCalculusJacobianHessian, JacobianNonSquare) {
     EXPECT_TRUE(test_expression_text(get_mat_entry(J, 1, 1), x)) << "J[1][1] = x";
 
     auto j20 = get_mat_entry(J, 2, 0);
-    auto j20_at = j20->substitute("x", SymbolicExpr::number(4));
-    j20_at = j20_at->simplify();
+    auto j20_at = LMCAS::substitute(j20, "x", SymbolicExpr::number(4)).value();
+    j20_at = LMCAS::simplify(j20_at).value();
     auto v20 = test_numeric_eval(j20_at);
     EXPECT_TRUE((v20.has_value() && std::abs(*v20 - 8.0) < 1e-10)) << "J[2][0] = 2x => 8 at x=4";
 
@@ -162,8 +162,8 @@ TEST(VectorCalculusJacobianHessian, HessianSingleVar) {
     EXPECT_TRUE((get_mat_cols(H) == 1)) << "1x1 Hessian has 1 column";
 
     auto h00 = get_mat_entry(H, 0, 0);
-    auto h00_at = h00->substitute("x", SymbolicExpr::number(2));
-    h00_at = h00_at->simplify();
+    auto h00_at = LMCAS::substitute(h00, "x", SymbolicExpr::number(2)).value();
+    h00_at = LMCAS::simplify(h00_at).value();
     auto v = test_numeric_eval(h00_at);
     EXPECT_TRUE((v.has_value() && std::abs(*v - 12.0) < 1e-10)) << "H[0][0] = 6x => 12 at x=2";
 }
@@ -200,32 +200,32 @@ TEST(VectorCalculusJacobianHessian, Hessian3dMixed) {
     auto H = hessian(f, {"x", "y", "z"});
 
     auto h01 = get_mat_entry(H, 0, 1);
-    auto h01_at = h01->substitute("x", SymbolicExpr::number(2));
-    h01_at = h01_at->substitute("y", SymbolicExpr::number(3));
-    h01_at = h01_at->substitute("z", SymbolicExpr::number(5));
-    h01_at = h01_at->simplify();
+    auto h01_at = LMCAS::substitute(h01, "x", SymbolicExpr::number(2)).value();
+    h01_at = LMCAS::substitute(h01_at, "y", SymbolicExpr::number(3)).value();
+    h01_at = LMCAS::substitute(h01_at, "z", SymbolicExpr::number(5)).value();
+    h01_at = LMCAS::simplify(h01_at).value();
     auto v01 = test_numeric_eval(h01_at);
     EXPECT_TRUE((v01.has_value() && std::abs(*v01 - 5.0) < 1e-10)) << "H[0][1] = z => 5 at z=5";
 
     auto h02 = get_mat_entry(H, 0, 2);
-    auto h02_at = h02->substitute("x", SymbolicExpr::number(2));
-    h02_at = h02_at->substitute("y", SymbolicExpr::number(3));
-    h02_at = h02_at->substitute("z", SymbolicExpr::number(5));
-    h02_at = h02_at->simplify();
+    auto h02_at = LMCAS::substitute(h02, "x", SymbolicExpr::number(2)).value();
+    h02_at = LMCAS::substitute(h02_at, "y", SymbolicExpr::number(3)).value();
+    h02_at = LMCAS::substitute(h02_at, "z", SymbolicExpr::number(5)).value();
+    h02_at = LMCAS::simplify(h02_at).value();
     auto v02 = test_numeric_eval(h02_at);
     EXPECT_TRUE((v02.has_value() && std::abs(*v02 - 3.0) < 1e-10)) << "H[0][2] = y => 3 at y=3";
 
     auto h12 = get_mat_entry(H, 1, 2);
-    auto h12_at = h12->substitute("x", SymbolicExpr::number(2));
-    h12_at = h12_at->substitute("y", SymbolicExpr::number(3));
-    h12_at = h12_at->substitute("z", SymbolicExpr::number(5));
-    h12_at = h12_at->simplify();
+    auto h12_at = LMCAS::substitute(h12, "x", SymbolicExpr::number(2)).value();
+    h12_at = LMCAS::substitute(h12_at, "y", SymbolicExpr::number(3)).value();
+    h12_at = LMCAS::substitute(h12_at, "z", SymbolicExpr::number(5)).value();
+    h12_at = LMCAS::simplify(h12_at).value();
     auto v12 = test_numeric_eval(h12_at);
     EXPECT_TRUE((v12.has_value() && std::abs(*v12 - 2.0) < 1e-10)) << "H[1][2] = x => 2 at x=2";
 
     auto h10 = get_mat_entry(H, 1, 0);
-    auto h10_at = h10->substitute("z", SymbolicExpr::number(5));
-    h10_at = h10_at->simplify();
+    auto h10_at = LMCAS::substitute(h10, "z", SymbolicExpr::number(5)).value();
+    h10_at = LMCAS::simplify(h10_at).value();
     auto v10 = test_numeric_eval(h10_at);
     EXPECT_TRUE((v10.has_value() && std::abs(*v10 - 5.0) < 1e-10)) << "H[1][0] = z => 5 (symmetric)";
 }
@@ -320,16 +320,16 @@ TEST(VectorCalculusJacobianHessian, UnsupportedDerivativeErrors) {
     auto jac = jacobian_checked({floor_x}, {"x"});
     ASSERT_FALSE(jac.has_value());
     EXPECT_EQ(jac.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(jac.error().operation, "jacobian");
+    EXPECT_EQ(jac.error().operation, "LMCAS.differentiate");
 
     auto hess = hessian_checked(floor_x, {"x"});
     ASSERT_FALSE(hess.has_value());
     EXPECT_EQ(hess.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(hess.error().operation, "hessian");
+    EXPECT_EQ(hess.error().operation, "LMCAS.differentiate");
 
     const auto integral = SymbolicExpr::make_integral(floor_x, "x");
     auto second = hessian_checked(integral, {"x"});
     ASSERT_FALSE(second.has_value());
     EXPECT_EQ(second.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(second.error().operation, "hessian");
+    EXPECT_EQ(second.error().operation, "LMCAS.differentiate");
 }

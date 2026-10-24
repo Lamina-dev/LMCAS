@@ -8,9 +8,10 @@ using namespace LMCAS;
 
 static std::shared_ptr<SymbolicExpr> num(int n) { return SymbolicExpr::number(n); }
 
-static bool close(const ApproxReal &value, double expected,
+static bool close(const QuadratureEstimate &value, double expected,
                   double tolerance = 1e-6) {
-    return value.status == NumericStatus::Finite &&
+    return std::isfinite(value.value) && std::isfinite(value.estimated_error) &&
+           value.estimated_error >= 0.0 &&
            std::abs(value.value - expected) < tolerance;
 }
 
@@ -41,9 +42,9 @@ TEST(LmcasNumericalIntegration, SimpsonErrorEstimate) {
     const double observed_error =
         r ? std::abs(r.value().value - 0.2) : 0.0;
     EXPECT_TRUE((r && observed_error < 2e-5)) << ("checked fixed Simpson integrates x^4 accurately");
-    EXPECT_TRUE((r && r.value().status == NumericStatus::Finite &&
-                 r.value().absolute_error > 1e-8 &&
-                 observed_error <= r.value().absolute_error + 1e-14))
+    EXPECT_TRUE((r && std::isfinite(r.value().estimated_error) &&
+                 r.value().estimated_error > 1e-8 &&
+                 observed_error <= r.value().estimated_error + 1e-14))
         << ("fixed Simpson reports its step-doubling error estimate");
 }
 
@@ -54,7 +55,21 @@ TEST(LmcasNumericalIntegration, SimpsonRichardson) {
     auto f = SymbolicExpr::power(x, num(4));
     auto r = quadrature_simpson_numeric(f, "x", num(0), num(1), 2);
     EXPECT_TRUE((r && std::abs(r.value().value - 0.2) < 1e-15)) << ("fixed Simpson returns its Richardson-extrapolated quartic value");
-    EXPECT_TRUE((r && r.value().absolute_error < 1e-3)) << ("fixed Simpson reports the fine-grid Richardson error scale");
+    EXPECT_TRUE((r && r.value().estimated_error < 1e-3)) << ("fixed Simpson reports the fine-grid Richardson error scale");
+}
+
+TEST(LmcasNumericalIntegration, SimpsonOrientation) {
+    auto x = SymbolicExpr::variable("x");
+    auto quartic = SymbolicExpr::power(x, num(4));
+    auto forward = quadrature_simpson_numeric(quartic, "x", num(0), num(1), 2);
+    auto reverse = quadrature_simpson_numeric(quartic, "x", num(1), num(0), 2);
+    ASSERT_TRUE(forward);
+    ASSERT_TRUE(reverse);
+    EXPECT_NEAR(forward.value().value, 0.2, 1e-15);
+    EXPECT_DOUBLE_EQ(reverse.value().value, -forward.value().value);
+    EXPECT_GT(reverse.value().estimated_error, 0.0);
+    EXPECT_DOUBLE_EQ(reverse.value().estimated_error,
+                     forward.value().estimated_error);
 }
 
 TEST(LmcasNumericalIntegration, SimpsonExtremeBounds) {
@@ -75,12 +90,23 @@ TEST(LmcasNumericalIntegration, ZeroMeasureBudget) {
     ComputationContext simpson_context(limits);
     auto simpson = quadrature_simpson_numeric(
         x, "x", num(1), num(1), simpson_context, 100);
-    EXPECT_TRUE((simpson && simpson.value().value == 0.0)) << ("zero-width Simpson returns zero before sample reservation");
+    EXPECT_TRUE((simpson && simpson.value().value == 0.0 &&
+                 simpson.value().estimated_error == 0.0))
+        << ("zero-width Simpson returns zero before sample reservation");
 
     ComputationContext gaussian_context(limits);
     auto gaussian = quadrature_gaussian_numeric(
         x, "x", num(1), num(1), gaussian_context, 20);
-    EXPECT_TRUE((gaussian && gaussian.value().value == 0.0)) << ("zero-width Gaussian returns zero before sample reservation");
+    EXPECT_TRUE((gaussian && gaussian.value().value == 0.0 &&
+                 gaussian.value().estimated_error == 0.0))
+        << ("zero-width Gaussian returns zero before sample reservation");
+
+    ComputationContext adaptive_context(limits);
+    auto adaptive = adaptive_simpson_numeric(
+        x, "x", num(1), num(1), adaptive_context);
+    EXPECT_TRUE((adaptive && adaptive.value().value == 0.0 &&
+                 adaptive.value().estimated_error == 0.0))
+        << ("zero-width adaptive Simpson returns zero before sampling");
 }
 
 TEST(LmcasNumericalIntegration, GaussianCubic) {
@@ -95,13 +121,13 @@ TEST(LmcasNumericalIntegration, GaussianCubic) {
 
 TEST(LmcasNumericalIntegration, GaussianCheckedCubic) {
     auto x = SymbolicExpr::variable("x");
-    // checked Gauss-Legendre reports the same value through Result<ApproxReal>
+    // Checked Gauss-Legendre reports its value through Result.
     auto f = SymbolicExpr::power(x, num(3));
     auto r = quadrature_gaussian_numeric(f, "x", num(0), num(1), 2);
     EXPECT_TRUE((r && std::abs(r.value().value - 0.25) < 1e-12)) << ("checked Gauss ∫₀¹ x³ dx = 1/4");
 }
 
-static bool gaussian_integrates_eighth_power(const LMCAS::Result<LMCAS::ApproxReal> &result) {
+static bool gaussian_integrates_eighth_power(const LMCAS::Result<LMCAS::QuadratureEstimate> &result) {
     return result && std::abs(result.value().value - 1.0 / 9.0) < 1e-13;
 }
 
@@ -118,8 +144,8 @@ TEST(LmcasNumericalIntegration, GaussianOrderAccuracy) {
     const double observed_error = order_four
                                       ? std::abs(order_four.value().value - 1.0 / 9.0)
                                       : 0.0;
-    EXPECT_TRUE((order_four && order_four.value().absolute_error > 1e-8 &&
-                 observed_error <= order_four.value().absolute_error + 1e-14))
+    EXPECT_TRUE((order_four && order_four.value().estimated_error > 1e-8 &&
+                 observed_error <= order_four.value().estimated_error + 1e-14))
         << ("Gaussian error metadata comes from an adjacent-order rule");
 
     auto order_twenty = quadrature_gaussian_numeric(
@@ -131,6 +157,20 @@ TEST(LmcasNumericalIntegration, GaussianOrderAccuracy) {
     EXPECT_TRUE((!unsupported &&
                  unsupported.error().code == CasErrc::InvalidArgument))
         << ("Gaussian orders above twenty are rejected explicitly");
+}
+
+TEST(LmcasNumericalIntegration, GaussianOrientation) {
+    auto x = SymbolicExpr::variable("x");
+    auto quartic = SymbolicExpr::power(x, num(4));
+    auto forward = quadrature_gaussian_numeric(quartic, "x", num(0), num(1), 2);
+    auto reverse = quadrature_gaussian_numeric(quartic, "x", num(1), num(0), 2);
+    ASSERT_TRUE(forward);
+    ASSERT_TRUE(reverse);
+    EXPECT_NEAR(forward.value().value, 7.0 / 36.0, 1e-14);
+    EXPECT_DOUBLE_EQ(reverse.value().value, -forward.value().value);
+    EXPECT_GT(reverse.value().estimated_error, 0.0);
+    EXPECT_DOUBLE_EQ(reverse.value().estimated_error,
+                     forward.value().estimated_error);
 }
 
 TEST(LmcasNumericalIntegration, GaussianExtremeBounds) {
@@ -159,8 +199,8 @@ TEST(LmcasNumericalIntegration, AdaptiveErrorBound) {
     auto r = adaptive_simpson_numeric(f, "x", num(0), num(1), 1e-10);
     EXPECT_TRUE((r.has_value())) << ("checked adaptive Simpson returns Result success");
     EXPECT_TRUE((r.has_value() && std::abs(r.value().value - 1.0 / 3.0) < 1e-8)) << ("checked adaptive Simpson ∫₀¹ x² dx = 1/3");
-    EXPECT_TRUE((r.has_value() && r.value().absolute_error >= 0.0 &&
-                 std::abs(r.value().value - 1.0 / 3.0) <= r.value().absolute_error))
+    EXPECT_TRUE((r.has_value() && r.value().estimated_error >= 0.0 &&
+                 std::abs(r.value().value - 1.0 / 3.0) <= r.value().estimated_error))
         << ("reported Simpson error bounds the observed quadratic error");
 }
 
@@ -212,7 +252,7 @@ TEST(LmcasNumericalIntegration, AdaptiveOrientation) {
     auto square = SymbolicExpr::multiply(x, x);
     auto r = adaptive_simpson_numeric(square, "x", num(1), num(0), 1e-10);
     EXPECT_TRUE((r && std::abs(r.value().value + 1.0 / 3.0) <=
-                          r.value().absolute_error + 1e-15))
+                          r.value().estimated_error + 1e-15))
         << ("reversed limits negate the integral");
 }
 
@@ -297,22 +337,4 @@ TEST(LmcasNumericalIntegration, AdaptiveTranscendental) {
                  f, "x", num(0), pi, 1e-10)
                  .value();
     EXPECT_TRUE((close(r, 2.0, 1e-6))) << ("adaptive Simpson ∫₀^π sin x dx = 2");
-}
-
-TEST(LmcasNumericalIntegration, NumericalQuadratic) {
-    auto x = SymbolicExpr::variable("x");
-    // numerical_integrate wrapper
-    auto f = SymbolicExpr::multiply(x, x);
-    auto r = numerical_integrate_numeric(
-                 f, "x", num(0), num(1), 100)
-                 .value();
-    EXPECT_TRUE((close(r, 1.0 / 3.0, 1e-6))) << ("numerical_integrate ∫₀¹ x² dx = 1/3");
-}
-
-TEST(LmcasNumericalIntegration, NumericalCheckedQuadratic) {
-    auto x = SymbolicExpr::variable("x");
-    // checked numerical_integrate wrapper uses the explicit fixed Simpson contract.
-    auto f = SymbolicExpr::multiply(x, x);
-    auto r = numerical_integrate_numeric(f, "x", num(0), num(1), 100);
-    EXPECT_TRUE((r && std::abs(r.value().value - 1.0 / 3.0) < 1e-10)) << ("checked numerical_integrate ∫₀¹ x² dx = 1/3");
 }

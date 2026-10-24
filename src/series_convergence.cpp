@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "series_engine.hpp"
 #include "symbolic.hpp"
@@ -18,10 +20,7 @@ double series_number_value(const NumberNode& number) {
     if (std::holds_alternative<BigInt>(number.value())) {
         return std::get<BigInt>(number.value()).to_double();
     }
-    if (std::holds_alternative<Rational>(number.value())) {
-        return std::get<Rational>(number.value()).to_double();
-    }
-    return static_cast<double>(std::get<lmmc_real_t>(number.value()));
+    return std::get<Rational>(number.value()).to_double();
 }
 
 bool series_is_number(const std::shared_ptr<SymbolicExpr>& expr) {
@@ -76,7 +75,10 @@ static bool series_index_variable(const std::shared_ptr<const VariableNode>& var
 }
 
 static std::optional<std::shared_ptr<SymbolicExpr>> coefficient_power_radius(
-    const PowerNode& power, const std::string& index_var) {
+    const PowerNode& power, const std::string& index_var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto exponent_variable = std::dynamic_pointer_cast<const VariableNode>(
         power.exponent());
     if (series_index_variable(exponent_variable, index_var) &&
@@ -86,7 +88,7 @@ static std::optional<std::shared_ptr<SymbolicExpr>> coefficient_power_radius(
                 FunctionNode::FuncType::Abs,
                 std::vector<std::shared_ptr<const SymbolicNode>>{
                     power.base()}));
-        return SymbolicExpr::divide(SymbolicExpr::number(1), absolute)->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::number(1), absolute)), transform_budget));
     }
     auto base_variable = std::dynamic_pointer_cast<const VariableNode>(
         power.base());
@@ -120,7 +122,7 @@ ExpressionResult convergence_radius_checked(
                               : SymbolicExpr::number(1));
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        auto radius = coefficient_power_radius(*power, index_var);
+        auto radius = coefficient_power_radius(*power, index_var, context);
         if (radius) {
             return ExpressionResult::success(std::move(*radius));
         }
@@ -271,12 +273,6 @@ static std::optional<ConvergenceInfo> geometric_term_convergence(
         inside_unit_circle = *integer > BigInt(-1) && *integer < BigInt(1);
     } else if (const auto* rational = std::get_if<Rational>(&base->value())) {
         inside_unit_circle = *rational > Rational(-1) && *rational < Rational(1);
-    } else {
-        const auto approximate = std::get<lmmc_real_t>(base->value());
-        if (!std::isfinite(approximate)) {
-            return std::nullopt;
-        }
-        inside_unit_circle = std::abs(approximate) < 1.0;
     }
     return ConvergenceInfo{
         inside_unit_circle ? ConvergenceResult::Convergent
@@ -305,12 +301,6 @@ static std::optional<ConvergenceInfo> power_term_convergence(
     } else if (const auto* rational = std::get_if<Rational>(&exponent->value())) {
         below_negative_one = *rational < Rational(-1);
         at_or_above_negative_one = !below_negative_one;
-    } else {
-        const auto approximate = std::get<lmmc_real_t>(exponent->value());
-        if (std::isfinite(approximate)) {
-            below_negative_one = approximate < -1.0;
-            at_or_above_negative_one = !below_negative_one;
-        }
     }
     if (below_negative_one) {
         return ConvergenceInfo{
@@ -324,11 +314,14 @@ static std::optional<ConvergenceInfo> power_term_convergence(
 }
 
 static ConvergenceInfo classify_ratio_limit(
-    const std::shared_ptr<SymbolicExpr>& lim) {
+    const std::shared_ptr<SymbolicExpr>& lim, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!lim) {
         return {ConvergenceResult::Inconclusive, ""};
     }
-    auto ls = lim->simplify();
+    auto ls = detail::make_expression_ptr(detail::normalize_node(detail::node(lim), transform_budget));
     auto infinity = ls
         ? std::dynamic_pointer_cast<const FunctionNode>(detail::node(ls))
         : nullptr;
@@ -356,29 +349,39 @@ static ConvergenceInfo classify_ratio_limit(
 
 static ConvergenceInfoResult ratio_convergence_test(
     const std::shared_ptr<SymbolicExpr>& general_term,
-    const std::string& index_var, ComputationContext& context) {
+    const std::string& index_var, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto n = SymbolicExpr::variable(index_var);
     auto n1 = SymbolicExpr::add(n, SymbolicExpr::number(1));
     auto inf = SymbolicExpr::infinity();
-    auto a_n1 = general_term->substitute(index_var, n1);
+    auto a_n1 = detail::make_expression_ptr(detail::substitute_node(detail::node(general_term), index_var, detail::node(n1), transform_budget));
     if (a_n1) {
-        a_n1 = a_n1->simplify();
+        a_n1 = detail::make_expression_ptr(detail::normalize_node(detail::node(a_n1), transform_budget));
         auto ratio = SymbolicExpr::divide(a_n1, general_term);
         if (ratio) {
-            ratio = ratio->simplify();
+            ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(ratio), transform_budget));
             auto abs_r = LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(
                 FunctionNode::FuncType::Abs, std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(ratio)}));
-            abs_r = abs_r->simplify();
+            abs_r = detail::make_expression_ptr(detail::normalize_node(detail::node(abs_r), transform_budget));
             auto limited = limit_expression_checked(
                 abs_r, index_var, inf, LimitDirection::Both, context);
             if (!limited) {
                 return ConvergenceInfoResult::failure(limited.error());
             }
             auto lim = std::move(limited.value());
-            return classify_ratio_limit(lim);
+            return classify_ratio_limit(lim, context);
         }
     }
     return ConvergenceInfo{ConvergenceResult::Inconclusive, ""};
+} catch (const CasError& error) {
+    return ConvergenceInfoResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ConvergenceInfoResult::failure(CasErrc::ResourceLimit, "allocation failed", "ratio_convergence_test");
+} catch (const std::length_error& error) {
+    return ConvergenceInfoResult::failure(CasErrc::ResourceLimit, error.what(), "ratio_convergence_test");
+} catch (const std::exception& error) {
+    return ConvergenceInfoResult::failure(CasErrc::InternalInvariant, error.what(), "ratio_convergence_test");
 }
 
 static ConvergenceInfoResult convergence_test_impl(

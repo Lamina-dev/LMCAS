@@ -106,9 +106,7 @@ std::shared_ptr<const SymbolicNode> parse_finite_number_node(
         return LMCAS::detail::make_node<NumberNode>(BigInt(token));
     }
 
-    auto value = LMCAS::detail::parse_finite_decimal(token);
-    if (!value) { throw invalid(); }
-    return LMCAS::detail::make_node<NumberNode>(value.value());
+    return LMCAS::detail::make_node<NumberNode>(Rational(token));
 }
 
 namespace {

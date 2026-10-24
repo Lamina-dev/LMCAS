@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
@@ -10,7 +11,7 @@ using namespace LMCAS;
 static ExprPtr derivative_order(ExprPtr expression, std::size_t order)
 {
     for (std::size_t current = 0; current < order; ++current) {
-        expression = expression->differentiate("x");
+        expression = LMCAS::differentiate(expression, "x").value();
         if (!expression) {
             return nullptr;
         }
@@ -30,9 +31,7 @@ static void expect_constant_coefficient_solution(
         auto basis = solution.general_solution;
         for (std::size_t index = 0;
              index < solution.constants.size(); ++index) {
-            basis = basis->substitute(
-                solution.constants[index],
-                SymbolicExpr::number(index == selected ? 1 : 0));
+            basis = LMCAS::substitute(basis, solution.constants[index], SymbolicExpr::number(index == selected ? 1 : 0)).value();
         }
 
         ExprPtr lhs = SymbolicExpr::number(0);
@@ -51,7 +50,7 @@ static void expect_constant_coefficient_solution(
                      SymbolicExpr::number(-1),
                      forcing ? forcing : SymbolicExpr::number(0)));
         EXPECT_TRUE(test_proved_equivalent(
-            residual->simplify(), SymbolicExpr::number(0)));
+            LMCAS::simplify(residual).value(), SymbolicExpr::number(0)));
     }
 }
 
@@ -89,11 +88,10 @@ TEST(OdeEngineHigherOrder, NearIntegerRoot) {
         {1.0, -root}, nullptr, "x", "y");
     ASSERT_TRUE(result.has_value());
     ASSERT_TRUE(result.value().general_solution);
-    auto basis = result.value().general_solution->substitute(
-        "C1", SymbolicExpr::number(1));
+    auto basis = LMCAS::substitute(result.value().general_solution, "C1", SymbolicExpr::number(1)).value();
     auto value = evaluate_numeric(*basis, {{"x", 0.0}});
     auto derivative = evaluate_numeric(
-        *basis->differentiate("x"), {{"x", 0.0}});
+        *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
     ASSERT_TRUE(value.has_value());
     ASSERT_TRUE(derivative.has_value());
     EXPECT_DOUBLE_EQ(value.value().value, 1.0);
@@ -116,14 +114,13 @@ TEST(OdeEngineHigherOrder, CloseDistinctQuadraticRoots) {
     for (const auto& selected : result.value().constants) {
         auto basis = result.value().general_solution;
         for (const auto& name : result.value().constants) {
-            basis = basis->substitute(
-                name, SymbolicExpr::number(name == selected ? 1 : 0));
+            basis = LMCAS::substitute(basis, name, SymbolicExpr::number(name == selected ? 1 : 0)).value();
         }
         auto value = evaluate_numeric(*basis, {{"x", 0.0}});
         auto first = evaluate_numeric(
-            *basis->differentiate("x"), {{"x", 0.0}});
+            *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
         auto second = evaluate_numeric(
-            *basis->differentiate("x")->differentiate("x"),
+            *LMCAS::differentiate(LMCAS::differentiate(basis, "x").value(), "x").value(),
             {{"x", 0.0}});
         ASSERT_TRUE(value.has_value());
         ASSERT_TRUE(first.has_value());
@@ -151,14 +148,13 @@ TEST(OdeEngineHigherOrder, ExactRepeatedQuadraticRoot) {
     for (const auto& selected : result.value().constants) {
         auto basis = result.value().general_solution;
         for (const auto& name : result.value().constants) {
-            basis = basis->substitute(
-                name, SymbolicExpr::number(name == selected ? 1 : 0));
+            basis = LMCAS::substitute(basis, name, SymbolicExpr::number(name == selected ? 1 : 0)).value();
         }
         auto value = evaluate_numeric(*basis, {{"x", 0.0}});
         auto first = evaluate_numeric(
-            *basis->differentiate("x"), {{"x", 0.0}});
+            *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
         auto second = evaluate_numeric(
-            *basis->differentiate("x")->differentiate("x"),
+            *LMCAS::differentiate(LMCAS::differentiate(basis, "x").value(), "x").value(),
             {{"x", 0.0}});
         ASSERT_TRUE(value.has_value());
         ASSERT_TRUE(first.has_value());
@@ -220,9 +216,9 @@ TEST(OdeEngineHigherOrder, LargeRoot) {
     ASSERT_TRUE((large_root.has_value())) << "checked higher-order ODE supports finite roots outside int range";
     if (large_root && large_root.value().general_solution) {
         auto unit_solution =
-            large_root.value().general_solution->substitute("C1", SymbolicExpr::number(1))->simplify();
+            LMCAS::simplify(LMCAS::substitute(large_root.value().general_solution, "C1", SymbolicExpr::number(1)).value()).value();
         auto derivative_at_zero = evaluate_numeric(
-            *unit_solution->differentiate("x"),
+            *LMCAS::differentiate(unit_solution, "x").value(),
             {{"x", 0.0}});
         ASSERT_TRUE((derivative_at_zero.has_value())) << "large-root solution derivative is numerically evaluable";
         if (derivative_at_zero) {
@@ -240,12 +236,10 @@ TEST(OdeEngineHigherOrder, SeparatedRoots) {
         for (const auto &selected : separated_roots.value().constants) {
             auto basis = separated_roots.value().general_solution;
             for (const auto &constant : separated_roots.value().constants) {
-                basis = basis->substitute(
-                    constant,
-                    SymbolicExpr::number(constant == selected ? 1 : 0));
+                basis = LMCAS::substitute(basis, constant, SymbolicExpr::number(constant == selected ? 1 : 0)).value();
             }
             auto derivative = evaluate_numeric(
-                *basis->differentiate("x"), {{"x", 0.0}});
+                *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
             if (derivative &&
                 std::abs((derivative.value().value + 1.0e-20) / 1.0e-20) <
                     1.0e-12) {
@@ -289,15 +283,13 @@ TEST(OdeEngineHigherOrder, SmallComplexRoots) {
                 small_complex_roots.value().general_solution;
             for (const auto &constant :
                  small_complex_roots.value().constants) {
-                basis = basis->substitute(
-                    constant,
-                    SymbolicExpr::number(
-                        constant == selected ? 1 : 0));
+                basis = LMCAS::substitute(basis, constant, SymbolicExpr::number(
+                        constant == selected ? 1 : 0)).value();
             }
             auto first = evaluate_numeric(
-                *basis->differentiate("x"), {{"x", 0.0}});
+                *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
             auto second = evaluate_numeric(
-                *basis->differentiate("x")->differentiate("x"),
+                *LMCAS::differentiate(LMCAS::differentiate(basis, "x").value(), "x").value(),
                 {{"x", 0.0}});
             if (first && second) {
                 preserved_sine_basis =
@@ -331,15 +323,13 @@ TEST(OdeEngineHigherOrder, CloseComplexRoots) {
                 close_complex_roots.value().general_solution;
             for (const auto &constant :
                  close_complex_roots.value().constants) {
-                basis = basis->substitute(
-                    constant,
-                    SymbolicExpr::number(
-                        constant == selected ? 1 : 0));
+                basis = LMCAS::substitute(basis, constant, SymbolicExpr::number(
+                        constant == selected ? 1 : 0)).value();
             }
             auto first = evaluate_numeric(
-                *basis->differentiate("x"), {{"x", 0.0}});
+                *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
             auto second = evaluate_numeric(
-                *basis->differentiate("x")->differentiate("x"),
+                *LMCAS::differentiate(LMCAS::differentiate(basis, "x").value(), "x").value(),
                 {{"x", 0.0}});
             if (first && second) {
                 preserved_sine_basis =
@@ -364,9 +354,9 @@ TEST(OdeEngineHigherOrder, ScaledCoefficients) {
     if (uniformly_small_coefficients &&
         uniformly_small_coefficients.value().general_solution) {
         auto basis =
-            uniformly_small_coefficients.value().general_solution->substitute("C1", SymbolicExpr::number(1))->simplify();
+            LMCAS::simplify(LMCAS::substitute(uniformly_small_coefficients.value().general_solution, "C1", SymbolicExpr::number(1)).value()).value();
         auto derivative = evaluate_numeric(
-            *basis->differentiate("x"), {{"x", 0.0}});
+            *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
         ASSERT_TRUE((derivative.has_value())) << "uniformly scaled ODE solution is numerically evaluable";
         if (derivative) {
             EXPECT_NEAR(derivative.value().value, -1.0, 1.0e-12) << "uniformly scaled ODE preserves its characteristic root";
@@ -392,13 +382,11 @@ TEST(OdeEngineHigherOrder, LargeCharacteristicRoots) {
                 large_characteristic_roots.value().general_solution;
             for (const auto &constant :
                  large_characteristic_roots.value().constants) {
-                basis = basis->substitute(
-                    constant,
-                    SymbolicExpr::number(
-                        constant == selected ? 1 : 0));
+                basis = LMCAS::substitute(basis, constant, SymbolicExpr::number(
+                        constant == selected ? 1 : 0)).value();
             }
             auto derivative = evaluate_numeric(
-                *basis->differentiate("x"), {{"x", 0.0}});
+                *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
             if (derivative) {
                 const double scaled_root =
                     derivative.value().value / root_scale;

@@ -1,82 +1,73 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
+#include "internal/assumption_facts.hpp"
 
 namespace LMCAS {
 
-Result<std::shared_ptr<SymbolicExpr>> TableLookupStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int) {
-    (void)computation;
-
-    auto all_entries = ctx.table().get_all_sorted();
-
-    for (const auto* entry : all_entries) {
-        MatchMap bindings;
-        if (Matcher::match(entry->pattern, expr, entry->wildcards, bindings)) {
-
-            // The matcher allows partial matches on commutative operations
-            // (Add/Multiply): unmatched operands are bound to __Add_REST__ /
-            // __Mul_REST__ for use by rewrite rules. For integration table
-            // lookup that behavior is wrong - a pattern like (1 + _u^2)^-1
-            // would otherwise match (1 + x^2 + x + x^3)^-1 with _u=x and the
-            // rest x + x^3 silently dropped, producing arctan(x) for an
-            // integrand that has nothing to do with arctan. Require an exact
-            // match (no leftover) so the result genuinely equals the
-            // integrand under this binding.
-            if (bindings.find("__Add_REST__") != bindings.end() ||
-                bindings.find("__Mul_REST__") != bindings.end()) {
-                continue;
-            }
-            const bool complete_binding = std::all_of(
-                entry->wildcards.begin(), entry->wildcards.end(),
-                [&](const std::string& wildcard_name) {
-                    return bindings.find(wildcard_name) != bindings.end();
-                });
-            if (!complete_binding) { continue; }
-
-            if (entry->condition && !entry->condition(bindings, var)) {
-                continue;
-            }
-
-            SymbolicExpr result = Matcher::replace(entry->result, bindings, false);
-            auto simplified = result.simplify();
-            if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
-                return simplified;
-            }
-        }
+Result<std::optional<SymbolicExpr>> detail::integrate_power_primitive(
+    const SymbolicExpr& base, const SymbolicExpr& exponent,
+    const std::string& variable, ComputationContext& context) {
+    if (depends_on_integration_variable(exponent, variable)) {
+        return std::optional<SymbolicExpr>{};
     }
-    return nullptr;
+    RewriteBudget budget(context, context.limits().max_recursion_depth,
+                         context.limits().max_ast_nodes, "integrate.power");
+    auto exact = exact_rational_value(node(exponent));
+    if (exact && *exact == Rational(-1)) {
+        return std::optional<SymbolicExpr>{*SymbolicExpr::ln(make_expression_ptr(base))};
+    }
+    auto next = exact ? SymbolicExpr::number(*exact + Rational(1)) :
+        make_expression_ptr(normalize_node(node(SymbolicExpr::add(
+            make_expression_ptr(exponent), SymbolicExpr::number(1))), budget));
+    if (!exact) {
+        std::optional<AssumptionFacts> facts;
+        if (context.assumptions()) { facts.emplace(*context.assumptions()); }
+        auto nonzero = query_nonzero_value(node(next),
+            facts ? static_cast<const FactsQuery&>(*facts) : no_facts(), Domain::Real, context);
+        if (!nonzero) {
+            return Result<std::optional<SymbolicExpr>>::failure(nonzero.error());
+        }
+        if (nonzero.value() != Tribool::True) { return std::optional<SymbolicExpr>{}; }
+    }
+    return std::optional<SymbolicExpr>{*SymbolicExpr::divide(
+        SymbolicExpr::power(make_expression_ptr(base), next), next)};
 }
 
-Result<std::shared_ptr<SymbolicExpr>> PowerRuleStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator&,
-    ComputationContext&, int) {
+Result<std::optional<detail::IntegralParts>> Integrator::try_table_lookup(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& computation, int) {
+    detail::RewriteBudget budget(computation, computation.limits().max_recursion_depth,
+                                 computation.limits().max_ast_nodes, "transform");
+    auto primitive = lookup_integral(entries_, expr, var, budget,
+        [](std::shared_ptr<SymbolicExpr> candidate) { return candidate; });
+    if (!primitive) { return std::optional<detail::IntegralParts>{}; }
+    return std::optional<detail::IntegralParts>{{*primitive, zero_}};
+}
 
-    if (auto v_node = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(expr))) {
-        if (!v_node->is_constant() && v_node->name() == var) {
-            return SymbolicExpr::multiply(
+Result<std::optional<detail::IntegralParts>> Integrator::try_power_rule(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& context, int) {
+    if (auto variable = std::dynamic_pointer_cast<const VariableNode>(detail::node(expr))) {
+        if (!variable->is_constant() && variable->name() == var) {
+            return std::optional<detail::IntegralParts>{{*SymbolicExpr::multiply(
                 SymbolicExpr::power(detail::make_expression_ptr(expr), SymbolicExpr::number(2)),
-                sym_rational(1, 2));
+                sym_rational(1, 2)), zero_}};
         }
     }
-
-    if (auto p_node = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(expr))) {
-        auto base = LMCAS::detail::expression_from_node(p_node->base());
-        auto exp_expr = LMCAS::detail::expression_from_node(p_node->exponent());
-        if (auto b_var = std::dynamic_pointer_cast<const VariableNode>(LMCAS::detail::node(base))) {
-            if (!b_var->is_constant() && b_var->name() == var &&
-                !depends_on_integration_variable(exp_expr, var)) {
-                auto n_plus_1 = SymbolicExpr::add(detail::make_expression_ptr(exp_expr), SymbolicExpr::number(1))->simplify();
-                if (n_plus_1->is_zero()) {
-
-                    return SymbolicExpr::ln(detail::make_expression_ptr(base));
-                }
-                return SymbolicExpr::divide(
-                    SymbolicExpr::power(detail::make_expression_ptr(base), n_plus_1),
-                    n_plus_1);
-            }
-        }
+    auto power = std::dynamic_pointer_cast<const PowerNode>(detail::node(expr));
+    if (!power) { return std::optional<detail::IntegralParts>{}; }
+    auto variable = std::dynamic_pointer_cast<const VariableNode>(power->base());
+    if (!variable || variable->is_constant() || variable->name() != var) {
+        return std::optional<detail::IntegralParts>{};
     }
-    return nullptr;
+    auto primitive = detail::integrate_power_primitive(detail::expression_from_node(power->base()),
+        detail::expression_from_node(power->exponent()), var, context);
+    if (!primitive) {
+        return Result<std::optional<detail::IntegralParts>>::failure(primitive.error());
+    }
+    if (!primitive.value()) { return std::optional<detail::IntegralParts>{}; }
+    return std::optional<detail::IntegralParts>{{std::move(*primitive.value()), zero_}};
 }
 
 }

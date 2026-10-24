@@ -1,4 +1,6 @@
-
+#include "internal/assumption_facts.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/rewrite_budget.hpp"
 #include "test_common.hpp"
 #include "assumption_context.hpp"
 #include "internal/visitors/normalization_visitor.hpp"
@@ -16,14 +18,20 @@ using namespace LMCAS;
 static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
     const std::shared_ptr<const SymbolicNode> &node,
     const AssumptionContext &ctx) {
-    auto expression = LMCAS::detail::expression_from_node(node);
-    return LMCAS::detail::node(ctx.simplify(expression));
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "test.normalize");
+    detail::AssumptionFacts facts(ctx);
+    return detail::normalize_node(node, budget, facts);
 }
 
 /// 使用空 AssumptionContext 执行兼容模式规范化.
 static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
     const std::shared_ptr<const SymbolicNode> &node) {
-    NormalizationVisitor v;
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    NormalizationVisitor v(transform_budget, detail::no_facts(), Domain::Real);
     node->accept(v);
     return v.get_result();
 }
@@ -88,8 +96,6 @@ static bool is_negation_of_var(const std::shared_ptr<const SymbolicNode> &node, 
     bool is_neg_one = false;
     if (std::holds_alternative<BigInt>(n->value())) {
         is_neg_one = (std::get<BigInt>(n->value()) == BigInt(-1));
-    } else if (std::holds_alternative<lmmc_real_t>(n->value())) {
-        is_neg_one = (std::get<lmmc_real_t>(n->value()) == -1.0);
     } else if (std::holds_alternative<Rational>(n->value())) {
         is_neg_one = (std::get<Rational>(n->value()) == Rational(-1));
     }
@@ -238,6 +244,9 @@ TEST(AssumptionSimplify, AbsNoAssumption) {
 }
 
 TEST(AssumptionSimplify, BackwardCompatSqrtXSquared) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     /// 空 AssumptionContext 保留 sqrt(x^2) 的定义域条件.
     auto x_squared = make_power(var("x"), 2);
     auto sqrt_x_sq = make_sqrt(x_squared);
@@ -246,7 +255,7 @@ TEST(AssumptionSimplify, BackwardCompatSqrtXSquared) {
 
     // The result should be the same as what the default visitor produces
     // (no assumption-based simplification)
-    NormalizationVisitor v_default;
+    NormalizationVisitor v_default(transform_budget, detail::no_facts(), Domain::Real);
     sqrt_x_sq->accept(v_default);
     auto result_default = v_default.get_result();
 
@@ -255,11 +264,14 @@ TEST(AssumptionSimplify, BackwardCompatSqrtXSquared) {
 }
 
 TEST(AssumptionSimplify, BackwardCompatAbsX) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto abs_x = make_abs(var("x"));
 
     auto result_no_ctx = normalize_no_ctx(abs_x);
 
-    NormalizationVisitor v_default;
+    NormalizationVisitor v_default(transform_budget, detail::no_facts(), Domain::Real);
     abs_x->accept(v_default);
     auto result_default = v_default.get_result();
 
@@ -267,6 +279,9 @@ TEST(AssumptionSimplify, BackwardCompatAbsX) {
 }
 
 TEST(AssumptionSimplify, BackwardCompatVariousExpressions) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     // Test a variety of expressions to ensure no assumption rules fire
     std::vector<std::shared_ptr<const SymbolicNode>> expressions = {
         // Simple variable
@@ -300,7 +315,7 @@ TEST(AssumptionSimplify, BackwardCompatVariousExpressions) {
 
         auto result_no_ctx = normalize_no_ctx(expr);
 
-        NormalizationVisitor v_default;
+        NormalizationVisitor v_default(transform_budget, detail::no_facts(), Domain::Real);
         expr->accept(v_default);
         auto result_default = v_default.get_result();
 

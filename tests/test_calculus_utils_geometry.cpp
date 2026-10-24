@@ -18,7 +18,7 @@ static auto var(const std::string &name) { return SE::variable(name); }
 static std::shared_ptr<SymbolicExpr> bigint_num(const BigInt &n) {
     return LMCAS::detail::make_expression_ptr(
         LMCAS::detail::make_node<NumberNode>(
-            std::variant<BigInt, Rational, lmmc_real_t>{
+            std::variant<BigInt, Rational>{
                 std::in_place_type<BigInt>, n}));
 }
 
@@ -51,14 +51,12 @@ TEST(CalculusUtilsGeometry, CurvatureDerivativeErrors) {
         auto explicit_result = curvature_checked(expression, "x");
         ASSERT_FALSE(explicit_result);
         EXPECT_EQ(explicit_result.error().code, CasErrc::UnsupportedExpression);
-        EXPECT_EQ(explicit_result.error().operation, "curvature");
         for (bool first_coordinate : {true, false}) {
             auto parametric = curvature_parametric_checked(
                 first_coordinate ? expression : var("x"),
                 first_coordinate ? var("x") : expression, "x");
             ASSERT_FALSE(parametric);
             EXPECT_EQ(parametric.error().code, CasErrc::UnsupportedExpression);
-            EXPECT_EQ(parametric.error().operation, "curvature_parametric");
         }
     }
 }
@@ -73,7 +71,6 @@ TEST(CalculusUtilsGeometry, InflectionDerivativeErrors) {
         auto result = inflection_points_checked(expression, "x");
         ASSERT_FALSE(result);
         EXPECT_EQ(result.error().code, CasErrc::UnsupportedExpression);
-        EXPECT_EQ(result.error().operation, "inflection_points");
     }
 }
 

@@ -28,7 +28,7 @@ namespace LMCAS {
 class InferenceEngine;
 class ComputationContext;
 struct Interval;
-namespace detail { class RewriteBudget; }
+namespace detail { class RewriteBudget; class AssumptionFacts; }
 
 using AssumptionVoidResult = Result<void>;
 using AssumptionTriboolResult = Result<Tribool>;
@@ -49,8 +49,6 @@ public:
     AssumptionContext& operator=(const AssumptionContext& other);
     AssumptionContext& operator=(AssumptionContext&& other) noexcept;
 
-    /** @brief 在本次调用中借用作用域栈事实进行规范化；事实查询未知或失败时保留未证明的表达式。 */
-    std::shared_ptr<SymbolicExpr> simplify(const SymbolicExpr& expression) const;
 
     // --- Scope management ---
 
@@ -335,6 +333,8 @@ public:
     int get_max_query_depth() const;
 
 private:
+    friend class detail::AssumptionFacts;
+
     static AssumptionContext deserialize_impl(
         const std::string& data, ComputationContext& context);
 

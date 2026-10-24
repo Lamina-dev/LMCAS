@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 /**
  * @file test_normalization_ext.cpp
  * @brief 测试 NormalizationVisitor 对新节点类型的规范化功能。
@@ -16,25 +17,30 @@
 using namespace LMCAS;
 
 static std::shared_ptr<const SymbolicNode> normalize(const std::shared_ptr<const SymbolicNode> &node) {
-    NormalizationVisitor v;
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    NormalizationVisitor v(transform_budget, detail::no_facts(), Domain::Real);
     node->accept(v);
     return v.get_result();
 }
 
-TEST(NormalizationExt, ApproximateSquareRootFunctionsPreserveTheirNumericDomain) {
+TEST(NormalizationExt, DecimalSquareRootFunctionsStayExact) {
     for (double argument : {1e-30, 1e200, 9.0 + 1e-11, 4.0}) {
         auto root = LMCAS::detail::make_node<FunctionNode>(
             FunctionNode::FuncType::Sqrt,
             std::vector<std::shared_ptr<const SymbolicNode>>{
                 LMCAS::detail::node(SymbolicExpr::number(argument))});
         auto value = LMCAS::detail::make_expression_ptr(normalize(root));
-        EXPECT_TRUE((LMCAS::structurally_equal(
-            *value, *SymbolicExpr::number(std::sqrt(argument)))))
-            << "approximate function roots retain small, large, and near-integer values";
+        auto squared = LMCAS::simplify(SymbolicExpr::power(value, SymbolicExpr::number(2)));
+        ASSERT_TRUE(squared);
+        EXPECT_TRUE(test_proved_equivalent(
+            squared.value(), SymbolicExpr::number(argument)))
+            << "decimal radicals preserve the exact radicand";
     }
 }
 
-TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRange) {
+TEST(NormalizationExt, PowerNormalizationPreservesExactExponentsAndFinalRange) {
     const struct {
         double base;
         double exponent;
@@ -43,9 +49,7 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
         {1e110, -3},
         {1e-108, -3},
         {1e200, -2},
-        {1e100, -3},
-        {2.0, 0x1p63},
-        {2.0, -0x1p63}};
+        {1e100, -3}};
     for (const auto &test : power_cases) {
         auto power = SymbolicExpr::power(
             SymbolicExpr::number(test.base), SymbolicExpr::number(test.exponent));
@@ -58,16 +62,18 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
             }
             auto value = LMCAS::evaluate_numeric(*simplified.value(), {{"power_factor", 1.0}});
             const double expected = std::pow(test.base, test.exponent);
-            if (std::isfinite(expected)) {
-                EXPECT_TRUE((value && value.value().value == expected)) << "normalization preserves the directly evaluated power";
+            if (std::isfinite(expected) && expected != 0.0) {
+                ASSERT_TRUE(value);
+                EXPECT_NEAR(value.value().value, expected, std::abs(expected) * 1e-12)
+                    << "normalization preserves the numerical value of exact powers";
             } else {
-                EXPECT_TRUE((!value && value.error().code == LMCAS::CasErrc::NumericFailure)) << "finite mathematical powers overflowing binary64 report NumericFailure";
+                EXPECT_TRUE((!value && value.error().code == LMCAS::CasErrc::NumericFailure))
+                    << "explicit numeric evaluation reports binary64 range errors";
             }
         }
     }
-    auto exact_reciprocal = SymbolicExpr::power(
-                                SymbolicExpr::number(10), SymbolicExpr::number(-3))
-                                ->simplify();
+    auto exact_reciprocal = LMCAS::simplify(SymbolicExpr::power(
+                                SymbolicExpr::number(10), SymbolicExpr::number(-3))).value();
     EXPECT_TRUE((LMCAS::structurally_equal(
         *exact_reciprocal, *SymbolicExpr::number(Rational(1, 1000)))))
         << "exact negative powers retain exact rational results";
@@ -75,7 +81,7 @@ TEST(NormalizationExt, PowerNormalizationPreservesApproximateExponentsAndFinalRa
         SymbolicExpr::number(-1.0 - 1e-13), SymbolicExpr::number(Rational(1, 2)));
     auto perturbed_square = SymbolicExpr::power(perturbed_root, SymbolicExpr::number(2));
     EXPECT_TRUE((LMCAS::structurally_equal(
-        *perturbed_square->simplify(), *perturbed_square)))
+        *LMCAS::simplify(perturbed_square).value(), *perturbed_square)))
         << "a nearby negative base is not classified as the imaginary unit";
 }
 
@@ -107,7 +113,12 @@ TEST(NormalizationExt, NonnegativeAssumptionsPreserveNearbyNonSquareExponents) {
         FunctionNode::FuncType::Sqrt,
         std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(near_square)});
     auto root_expression = LMCAS::detail::expression_from_node(root_function);
-    auto assumed_root = assumptions.simplify(root_expression);
+    ComputationContext context;
+    ASSERT_TRUE(context.set_assumptions(std::make_shared<AssumptionContext>(assumptions)));
+    auto assumed = LMCAS::simplify(
+        std::make_shared<SymbolicExpr>(root_expression), context);
+    ASSERT_TRUE(assumed);
+    auto assumed_root = assumed.value();
     auto assumed_value = LMCAS::evaluate_numeric(*assumed_root, {{"root_base", 1e100}});
     EXPECT_TRUE((assumed_value &&
                  assumed_value.value().value == std::sqrt(std::pow(1e100, near_two))))

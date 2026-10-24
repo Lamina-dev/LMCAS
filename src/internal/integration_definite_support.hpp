@@ -35,7 +35,7 @@ inline bool is_undecided(const CasError& error) {
         error.code == CasErrc::UnsupportedExpression;
 }
 
-std::optional<Rational> exact_number(const Node& node, bool allow_binary = false);
+std::optional<Rational> exact_number(const Node& node);
 Node absolute_argument(const SymbolicNode& node);
 int infinity_sign(const Node& node);
 Result<Boundary> boundary_checked(const SymbolicExpr& expression, ComputationContext& context);

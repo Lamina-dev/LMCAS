@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "parametric_solver.hpp"
 #include "solver.hpp"
 #include "solve_strategies.hpp"
@@ -35,12 +36,15 @@ ParametricSolutionList free_unknowns(const std::vector<std::string>& unknowns) {
 }
 
 std::vector<SymbolicExpr> parametric_input_polynomials(
-    const std::vector<std::shared_ptr<SymbolicExpr>>& equations) {
+    const std::vector<std::shared_ptr<SymbolicExpr>>& equations, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<SymbolicExpr> input_polys;
     input_polys.reserve(equations.size());
     for (const auto& eq : equations) {
         if (eq && LMCAS::detail::node(eq)) {
-            auto simplified = eq->simplify();
+            auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(eq), transform_budget));
             if (simplified && !simplified->is_zero()) {
                 input_polys.push_back(*simplified);
             }
@@ -50,14 +54,17 @@ std::vector<SymbolicExpr> parametric_input_polynomials(
 }
 
 ParametricBasis parametric_basis(const std::vector<SymbolicExpr>& input_polys,
-                                 const std::vector<std::string>& unknowns) {
+                                 const std::vector<std::string>& unknowns, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto G_basis = Solver::groebner_basis(input_polys, unknowns);
 
     std::vector<std::shared_ptr<SymbolicExpr>> basis;
     basis.reserve(G_basis.size());
     for (const auto& g : G_basis) {
         auto g_ptr = LMCAS::detail::make_expression_ptr(g);
-        auto simp = g_ptr->simplify();
+        auto simp = detail::make_expression_ptr(detail::normalize_node(detail::node(g_ptr), transform_budget));
         if (simp && !simp->is_zero()) {
             basis.push_back(simp);
         }
@@ -77,15 +84,18 @@ bool depends_on_remaining_unknown(const SymbolicExpr& expression,
 }
 
 std::shared_ptr<SymbolicExpr> substitute_assignment(
-    const std::shared_ptr<SymbolicExpr>& expression, const ParametricAssignment& assignment) {
+    const std::shared_ptr<SymbolicExpr>& expression, const ParametricAssignment& assignment, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto result = expression;
     for (const auto& [name, value] : assignment) {
-        result = result->substitute(name, value);
+        result = detail::make_expression_ptr(detail::substitute_node(detail::node(result), name, detail::node(value), transform_budget));
         if (!result) {
             return nullptr;
         }
     }
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 class ParametricBranchSolver {
@@ -98,7 +108,7 @@ class ParametricBranchSolver {
                       ParametricBasis& reduced) const {
         reduced.reserve(basis_.size());
         for (const auto& polynomial : basis_) {
-            auto expression = substitute_assignment(polynomial, partial);
+            auto expression = substitute_assignment(polynomial, partial, context_);
             if (!expression) {
                 return Result<bool>::failure(CasErrc::InternalInvariant,
                     "assignment substitution failed", "solve.parametric");
@@ -233,7 +243,7 @@ ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
     if (equations.empty() || unknowns.empty()) {
         return free_unknowns(unknowns);
     }
-    auto input_polys = parametric_input_polynomials(equations);
+    auto input_polys = parametric_input_polynomials(equations, context);
     if (input_polys.empty()) {
         return free_unknowns(unknowns);
     }
@@ -243,7 +253,7 @@ ParametricSolutionsResult ParametricSolver::solve_polynomial_parametric_impl(
         for (const auto& polynomial : input_polys)
             basis.push_back(detail::make_expression_ptr(polynomial));
     } else {
-        basis = parametric_basis(input_polys, unknowns);
+        basis = parametric_basis(input_polys, unknowns, context);
     }
     for (const auto& polynomial : basis) {
         if (!depends_on_remaining_unknown(*polynomial, unknowns, static_cast<int>(unknowns.size()) - 1)) {

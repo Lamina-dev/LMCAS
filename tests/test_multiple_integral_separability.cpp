@@ -1,4 +1,4 @@
-
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "integration.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -120,13 +120,13 @@ void compare_integral_results(
     const std::shared_ptr<SymbolicExpr> &engine_result,
     const std::shared_ptr<SymbolicExpr> &Ix,
     const std::shared_ptr<SymbolicExpr> &Iy, ComboReport &rep) {
-    auto engine_simp = engine_result->simplify();
+    auto engine_simp = LMCAS::simplify(engine_result).value();
     if (!engine_simp) {
         engine_simp = engine_result;
     }
 
-    auto Ix_simp = Ix->simplify();
-    auto Iy_simp = Iy->simplify();
+    auto Ix_simp = LMCAS::simplify(Ix).value();
+    auto Iy_simp = LMCAS::simplify(Iy).value();
     if (!Ix_simp || !Iy_simp) {
         rep.failed = true;
         rep.detail = "simplify of per-variable integral returned null";
@@ -142,15 +142,16 @@ void verify_separated_product(
     const std::shared_ptr<SymbolicExpr> &y_lo,
     const std::shared_ptr<SymbolicExpr> &y_hi, Integrator &integrator,
     const std::shared_ptr<SymbolicExpr> &engine_result, ComboReport &rep) {
+    ComputationContext context;
     auto fx2 = f.build(SymbolicExpr::variable("x"));
     auto gy2 = g.build(SymbolicExpr::variable("y"));
-    auto ix_result = integrator.integrate_def(*fx2, "x", *x_lo, *x_hi);
+    auto ix_result = integrator.integrate_def_checked(*fx2, "x", *x_lo, *x_hi, context);
     if (!ix_result) {
         rep.failed = true;
         rep.detail = std::string("x integration failed: ") + ix_result.error().message;
         return;
     }
-    auto iy_result = integrator.integrate_def(*gy2, "y", *y_lo, *y_hi);
+    auto iy_result = integrator.integrate_def_checked(*gy2, "y", *y_lo, *y_hi, context);
     if (!iy_result) {
         rep.failed = true;
         rep.detail = std::string("y integration failed: ") + iy_result.error().message;

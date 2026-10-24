@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_matrix.hpp"
 #include "residual_verification.hpp"
@@ -67,7 +68,7 @@ static bool check_eigenvector_image(const ExprPtr &matrix,
         return false;
     }
     auto image = std::dynamic_pointer_cast<const MatrixNode>(
-        detail::node(av.value()->simplify()));
+        detail::node(LMCAS::simplify(av.value()).value()));
     EXPECT_TRUE((image && image->rows() == dimension && image->cols() == 1)) << "eigenvector image has the required dimensions";
     if (!image || image->rows() != dimension || image->cols() != 1) {
         return false;

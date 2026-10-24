@@ -2,20 +2,74 @@
 #include "assumption_context.hpp"
 #include <gtest/gtest.h>
 #include <limits>
+#include <utility>
 
 using namespace LMCAS;
 
 namespace {
+
+TEST(ExprEquivalence, LiteralZeroAndOneAreStrict) {
+    EXPECT_FALSE(SymbolicExpr::number(1e-13)->is_zero());
+    EXPECT_FALSE(SymbolicExpr::number(1.0 + 1e-13)->is_one());
+    EXPECT_TRUE(SymbolicExpr::number(0.0)->is_zero());
+    EXPECT_TRUE(SymbolicExpr::number(1.0)->is_one());
+    EXPECT_TRUE(SymbolicExpr::number(Rational(0))->is_zero());
+    EXPECT_TRUE(SymbolicExpr::number(Rational(1))->is_one());
+}
+
+TEST(ExprEquivalence, DecimalInputsProveExactEquality) {
+    auto zero = SymbolicExpr::number(0);
+    auto one = SymbolicExpr::number(1);
+    auto cancelled = SymbolicExpr::add(
+        SymbolicExpr::number(0.1), SymbolicExpr::number(-0.1));
+    auto rounded = SymbolicExpr::add(
+        SymbolicExpr::add(SymbolicExpr::number(1e16), one),
+        SymbolicExpr::number(-1e16));
+    for (const auto& pair : {
+             std::make_pair(SymbolicExpr::number(0.1), SymbolicExpr::number(Rational(1, 10))),
+             std::make_pair(SymbolicExpr::number(1.0), one),
+             std::make_pair(cancelled, zero),
+             std::make_pair(rounded, one)}) {
+        ComputationContext context;
+        auto result = equivalent(*pair.first, *pair.second, context);
+        ASSERT_TRUE(result);
+        EXPECT_TRUE(result.value());
+    }
+    ComputationContext context;
+    auto nonzero = equivalent(*SymbolicExpr::number(1e-13), *zero, context);
+    ASSERT_TRUE(nonzero);
+    EXPECT_FALSE(nonzero.value());
+}
+
+TEST(ExprEquivalence, StructuralEqualityChecksLimits) {
+    auto expression = SymbolicExpr::sin(SymbolicExpr::number(0.25));
+    ComputationContext context;
+    auto same = equivalent(*expression, *expression, context);
+    ASSERT_TRUE(same);
+    EXPECT_TRUE(same.value());
+    ResourceLimits limits;
+    limits.max_ast_nodes = 1;
+    ComputationContext limited(limits);
+    auto oversized = equivalent(*expression, *expression, limited);
+    ASSERT_FALSE(oversized);
+    EXPECT_EQ(oversized.error().code, CasErrc::ResourceLimit);
+    CancellationToken cancellation;
+    cancellation.cancel();
+    ComputationContext cancelled({}, cancellation);
+    auto stopped = equivalent(*expression, *expression, cancelled);
+    ASSERT_FALSE(stopped);
+    EXPECT_EQ(stopped.error().code, CasErrc::Cancelled);
+}
 
 TEST(ExprEquivalence, CommutativeAdditiveIdentity) {
     auto x = LMCAS::sym("x");
     auto one_plus_x = SymbolicExpr::add(SymbolicExpr::number(1), x.value());
     auto x_plus_one = SymbolicExpr::add(x.value(), SymbolicExpr::number(1));
     LMCAS::ComputationContext equivalent_context;
-    auto equivalent = LMCAS::equivalent_core(*one_plus_x,
+    auto equivalent = LMCAS::equivalent(*one_plus_x,
                                              *x_plus_one,
                                              equivalent_context);
-    EXPECT_TRUE((equivalent && equivalent.value())) << "equivalent_core proves normalized additive equality";
+    EXPECT_TRUE((equivalent && equivalent.value())) << "equivalent proves normalized additive equality";
 }
 
 TEST(ExprEquivalence, ArithmeticIdentities) {
@@ -25,17 +79,17 @@ TEST(ExprEquivalence, ArithmeticIdentities) {
     auto x_minus_x = SymbolicExpr::add(
         x.value(), SymbolicExpr::multiply(SymbolicExpr::number(-1), x.value()));
     LMCAS::ComputationContext multiply_identity_context;
-    auto multiply_identity = LMCAS::equivalent_core(
+    auto multiply_identity = LMCAS::equivalent(
         *x_times_one, *x.value(), multiply_identity_context);
     LMCAS::ComputationContext multiply_zero_context;
-    auto multiply_zero = LMCAS::equivalent_core(
+    auto multiply_zero = LMCAS::equivalent(
         *x_times_zero, *SymbolicExpr::number(0), multiply_zero_context);
     LMCAS::ComputationContext subtract_self_context;
-    auto subtract_self = LMCAS::equivalent_core(
+    auto subtract_self = LMCAS::equivalent(
         *x_minus_x, *SymbolicExpr::number(0), subtract_self_context);
-    EXPECT_TRUE((multiply_identity && multiply_identity.value())) << "equivalent_core proves Core x * 1 identity";
-    EXPECT_TRUE((multiply_zero && multiply_zero.value())) << "equivalent_core proves Core x * 0 identity";
-    EXPECT_TRUE((subtract_self && subtract_self.value())) << "equivalent_core proves Core x - x identity";
+    EXPECT_TRUE((multiply_identity && multiply_identity.value())) << "equivalent proves Core x * 1 identity";
+    EXPECT_TRUE((multiply_zero && multiply_zero.value())) << "equivalent proves Core x * 0 identity";
+    EXPECT_TRUE((subtract_self && subtract_self.value())) << "equivalent proves Core x - x identity";
 }
 
 TEST(ExprEquivalence, PolynomialIdentity) {
@@ -47,9 +101,9 @@ TEST(ExprEquivalence, PolynomialIdentity) {
     auto expanded_square = SymbolicExpr::add(
         SymbolicExpr::add(x_squared, two_x), SymbolicExpr::number(1));
     LMCAS::ComputationContext polynomial_eqv_context;
-    auto polynomial_equivalent = LMCAS::equivalent_core(
+    auto polynomial_equivalent = LMCAS::equivalent(
         *x_plus_one_squared, *expanded_square, polynomial_eqv_context);
-    EXPECT_TRUE((polynomial_equivalent && polynomial_equivalent.value())) << "equivalent_core proves the LMCAS polynomial Core example";
+    EXPECT_TRUE((polynomial_equivalent && polynomial_equivalent.value())) << "equivalent proves the LMCAS polynomial Core example";
 }
 
 TEST(ExprEquivalence, RenamedPolynomialIdentity) {
@@ -61,9 +115,9 @@ TEST(ExprEquivalence, RenamedPolynomialIdentity) {
     auto expanded_y_square = SymbolicExpr::add(
         SymbolicExpr::add(y_squared, two_y), SymbolicExpr::number(1));
     LMCAS::ComputationContext y_polynomial_eqv_context;
-    auto y_polynomial_equivalent = LMCAS::equivalent_core(
+    auto y_polynomial_equivalent = LMCAS::equivalent(
         *y_plus_one_squared, *expanded_y_square, y_polynomial_eqv_context);
-    EXPECT_TRUE((y_polynomial_equivalent && y_polynomial_equivalent.value())) << "equivalent_core polynomial proof is not hard-coded to x";
+    EXPECT_TRUE((y_polynomial_equivalent && y_polynomial_equivalent.value())) << "equivalent polynomial proof is not hard-coded to x";
 }
 
 TEST(ExprEquivalence, InvalidRewriteBudgets) {
@@ -116,17 +170,15 @@ void expect_rewrite_budget_boundary(
     limited_options.profile = profile;
     limited_options.budget.max_rewrite_steps = 8;
     ComputationContext limited_context;
-    auto limited = equivalent_core(
-        *lhs, *rhs, limited_context, limited_options);
+    auto limited = equivalent(*lhs, *rhs, limited_context, limited_options);
     ASSERT_FALSE(limited);
     EXPECT_EQ(limited.error().code, CasErrc::ResourceLimit);
-    EXPECT_EQ(limited.error().operation, "LMCAS.equivalent_core");
+    EXPECT_EQ(limited.error().operation, "LMCAS.equivalent");
 
     EqvOptions sufficient_options = limited_options;
     sufficient_options.budget.max_rewrite_steps = 256;
     ComputationContext sufficient_context;
-    auto sufficient = equivalent_core(
-        *lhs, *rhs, sufficient_context, sufficient_options);
+    auto sufficient = equivalent(*lhs, *rhs, sufficient_context, sufficient_options);
     ASSERT_TRUE(sufficient);
     EXPECT_TRUE(sufficient.value());
 }
@@ -169,11 +221,10 @@ TEST(ExprEquivalence, CancellationPrecedesLocalRewriteExhaustion) {
         CancellationToken cancellation;
         cancellation.cancel();
         ComputationContext context({}, cancellation);
-        auto cancelled = equivalent_core(
-            *identity, *SymbolicExpr::number(1), context, options);
+        auto cancelled = equivalent(*identity, *SymbolicExpr::number(1), context, options);
         ASSERT_FALSE(cancelled);
         EXPECT_EQ(cancelled.error().code, CasErrc::Cancelled);
-        EXPECT_EQ(cancelled.error().operation, "LMCAS.equivalent_core");
+        EXPECT_EQ(cancelled.error().operation, "LMCAS.equivalent");
     }
 }
 
@@ -187,11 +238,10 @@ TEST(ExprEquivalence, ComputationResourceErrorRetainsOperation) {
     ResourceLimits limits;
     limits.max_steps = 1;
     ComputationContext context(limits);
-    auto exhausted = equivalent_core(
-        *identity, *SymbolicExpr::number(1), context, options);
+    auto exhausted = equivalent(*identity, *SymbolicExpr::number(1), context, options);
     ASSERT_FALSE(exhausted);
     EXPECT_EQ(exhausted.error().code, CasErrc::ResourceLimit);
-    EXPECT_EQ(exhausted.error().operation, "LMCAS.equivalent_core");
+    EXPECT_EQ(exhausted.error().operation, "LMCAS.equivalent");
 }
 
 std::shared_ptr<SymbolicExpr> binomial_product(std::size_t factors) {
@@ -214,13 +264,13 @@ TEST(ExprEquivalence, RuntimeRewriteDepth) {
     EqvOptions options;
     options.budget.max_rewrite_depth = 8;
     ComputationContext limited_context;
-    auto limited = equivalent_core(*chain, *chain, limited_context, options);
+    auto limited = equivalent(*chain, *chain, limited_context, options);
     EXPECT_TRUE((!limited && limited.error().code == CasErrc::ResourceLimit)) << "eight nested sines exceed rewrite depth eight";
     EXPECT_TRUE((!limited && std::string(error_name(limited.error())) == "EqvBudgetExceeded")) << "runtime depth exhaustion retains the equivalence error name";
 
     options.budget.max_rewrite_depth = 32;
     ComputationContext sufficient_context;
-    auto sufficient = equivalent_core(*chain, *chain, sufficient_context, options);
+    auto sufficient = equivalent(*chain, *chain, sufficient_context, options);
     EXPECT_TRUE((sufficient && sufficient.value())) << "the same nested expression is equivalent with sufficient depth";
 }
 
@@ -231,14 +281,8 @@ TEST(ExprEquivalence, RuntimeNodeGrowth) {
     EqvOptions options;
     options.budget.max_node_growth_factor = 4;
     ComputationContext limited_context;
-    auto limited = equivalent_core(*product, *zero, limited_context, options);
+    auto limited = equivalent(*product, *zero, limited_context, options);
     EXPECT_TRUE((!limited && limited.error().code == CasErrc::ResourceLimit)) << "five binomial factors exceed fourfold growth while expanding";
-
-    ComputationContext facade_context;
-    auto facade = equivalent(*product, *zero, facade_context, options);
-    ASSERT_FALSE(facade);
-    EXPECT_EQ(facade.error().code, CasErrc::ResourceLimit);
-
 }
 
 TEST(ExprEquivalence, FlattenedProductsFitTheNodeBudget) {
@@ -250,7 +294,7 @@ TEST(ExprEquivalence, FlattenedProductsFitTheNodeBudget) {
     EqvOptions options;
     options.budget.max_node_growth_factor = 2;
     ComputationContext context;
-    auto result = equivalent_core(*product, *zero, context, options);
+    auto result = equivalent(*product, *zero, context, options);
     ASSERT_FALSE(result);
     EXPECT_EQ(result.error().code, CasErrc::Inconclusive);
 }
@@ -262,13 +306,13 @@ TEST(ExprEquivalence, SaturatedGrowthAndCancellation) {
     EqvOptions options;
     options.budget.max_node_growth_factor = std::numeric_limits<std::size_t>::max();
     ComputationContext context;
-    auto result = equivalent_core(*identity, *x, context, options);
+    auto result = equivalent(*identity, *x, context, options);
     EXPECT_TRUE((result && result.value())) << "SIZE_MAX growth saturates instead of wrapping the node allowance";
 
     CancellationToken cancellation;
     cancellation.cancel();
     ComputationContext cancelled_context({}, cancellation);
-    auto cancelled = equivalent_core(*identity, *x, cancelled_context, options);
+    auto cancelled = equivalent(*identity, *x, cancelled_context, options);
     EXPECT_TRUE((!cancelled && cancelled.error().code == CasErrc::Cancelled)) << "equivalence still returns cancellation with a saturated growth allowance";
 }
 
@@ -283,10 +327,10 @@ TEST(ExprEquivalence, TrigonometricIdentity) {
     auto trig_configured = LMCAS::set_eqv_profile(trig_profile, "Trig-Basic");
     EXPECT_TRUE((trig_configured.has_value())) << "set_eqv_profile accepts the LMCAS Trig-Basic profile name";
     LMCAS::ComputationContext trig_profile_context;
-    auto trig_equivalent = LMCAS::equivalent_core(
+    auto trig_equivalent = LMCAS::equivalent(
         *trig_identity, *SymbolicExpr::number(1), trig_profile_context,
         trig_profile);
-    EXPECT_TRUE((trig_equivalent && trig_equivalent.value())) << "equivalent_core proves the LMCAS Trig-Basic sin^2+cos^2 identity";
+    EXPECT_TRUE((trig_equivalent && trig_equivalent.value())) << "equivalent proves the LMCAS Trig-Basic sin^2+cos^2 identity";
 }
 
 TEST(ExprEquivalence, TrigonometricParity) {
@@ -299,16 +343,16 @@ TEST(ExprEquivalence, TrigonometricParity) {
     auto negative_sin_y = SymbolicExpr::multiply(
         SymbolicExpr::number(-1), SymbolicExpr::sin(y.value()));
     LMCAS::ComputationContext trig_sin_odd_context;
-    auto sin_odd_equivalent = LMCAS::equivalent_core(
+    auto sin_odd_equivalent = LMCAS::equivalent(
         *sin_negative_y, *negative_sin_y, trig_sin_odd_context, trig_profile);
-    EXPECT_TRUE((sin_odd_equivalent && sin_odd_equivalent.value())) << "equivalent_core proves the LMCAS Trig-Basic sin odd identity";
+    EXPECT_TRUE((sin_odd_equivalent && sin_odd_equivalent.value())) << "equivalent proves the LMCAS Trig-Basic sin odd identity";
 
     auto cos_negative_y = SymbolicExpr::cos(negative_y);
     auto cos_y = SymbolicExpr::cos(y.value());
     LMCAS::ComputationContext trig_cos_even_context;
-    auto cos_even_equivalent = LMCAS::equivalent_core(
+    auto cos_even_equivalent = LMCAS::equivalent(
         *cos_negative_y, *cos_y, trig_cos_even_context, trig_profile);
-    EXPECT_TRUE((cos_even_equivalent && cos_even_equivalent.value())) << "equivalent_core proves the LMCAS Trig-Basic cos even identity";
+    EXPECT_TRUE((cos_even_equivalent && cos_even_equivalent.value())) << "equivalent proves the LMCAS Trig-Basic cos even identity";
 }
 
 TEST(ExprEquivalence, TrigonometricProfileBoundary) {
@@ -321,7 +365,7 @@ TEST(ExprEquivalence, TrigonometricProfileBoundary) {
     LMCAS::EqvOptions trig_profile;
     auto trig_configured = LMCAS::set_eqv_profile(trig_profile, "Trig-Basic");
     LMCAS::ComputationContext core_trig_context;
-    auto core_trig_equivalent = LMCAS::equivalent_core(
+    auto core_trig_equivalent = LMCAS::equivalent(
         *trig_identity, *SymbolicExpr::number(1), core_trig_context);
     ASSERT_FALSE(core_trig_equivalent);
     EXPECT_EQ(core_trig_equivalent.error().code, CasErrc::Inconclusive);
@@ -349,29 +393,29 @@ TEST(ExprEquivalence, ExponentialLogarithmProfiles) {
         << "unsupported equivalence profile exposes EqvRuleDisabled";
     LMCAS::ComputationContext exp_log_profile_context;
     auto exp_zero = SymbolicExpr::exp(SymbolicExpr::number(0));
-    auto exp_log_equivalent = LMCAS::equivalent_core(
+    auto exp_log_equivalent = LMCAS::equivalent(
         *exp_zero, *SymbolicExpr::number(1), exp_log_profile_context,
         exp_log_profile);
-    EXPECT_TRUE((exp_log_equivalent && exp_log_equivalent.value())) << "equivalent_core proves the LMCAS ExpLog-Basic exp(0) identity";
+    EXPECT_TRUE((exp_log_equivalent && exp_log_equivalent.value())) << "equivalent proves the LMCAS ExpLog-Basic exp(0) identity";
 
     auto ln_one = SymbolicExpr::ln(SymbolicExpr::number(1));
     LMCAS::ComputationContext ln_one_context;
-    auto ln_one_equivalent = LMCAS::equivalent_core(
+    auto ln_one_equivalent = LMCAS::equivalent(
         *ln_one, *SymbolicExpr::number(0), ln_one_context, exp_log_profile);
-    EXPECT_TRUE((ln_one_equivalent && ln_one_equivalent.value())) << "equivalent_core proves the LMCAS ExpLog-Basic ln(1) identity";
+    EXPECT_TRUE((ln_one_equivalent && ln_one_equivalent.value())) << "equivalent proves the LMCAS ExpLog-Basic ln(1) identity";
 
     auto lambert = SymbolicExpr::lambertw(SymbolicExpr::number(1));
     auto negative_lambert = SymbolicExpr::multiply(
         SymbolicExpr::number(-1), lambert);
     auto exponential = SymbolicExpr::exp(negative_lambert);
     LMCAS::ComputationContext lambert_context;
-    auto lambert_equivalent = LMCAS::equivalent_core(
+    auto lambert_equivalent = LMCAS::equivalent(
         *exponential, *lambert, lambert_context, exp_log_profile);
     EXPECT_TRUE((lambert_equivalent && lambert_equivalent.value()))
         << "ExpLog-Basic proves the defining LambertW identity at one";
     auto lambert_residual = SymbolicExpr::add(exponential, negative_lambert);
     LMCAS::ComputationContext lambert_residual_context;
-    auto lambert_residual_zero = LMCAS::equivalent_core(
+    auto lambert_residual_zero = LMCAS::equivalent(
         *lambert_residual, *SymbolicExpr::number(0),
         lambert_residual_context, exp_log_profile);
     EXPECT_TRUE((lambert_residual_zero && lambert_residual_zero.value()))
@@ -385,7 +429,7 @@ TEST(ExprEquivalence, ExponentialLogarithmDomainEvidence) {
     EXPECT_TRUE((configured.has_value())) << "configure domain-dependent equivalence profile";
     auto exp_ln_y = SymbolicExpr::exp(SymbolicExpr::ln(y.value()));
     LMCAS::ComputationContext exp_ln_unproven_context;
-    auto exp_ln_unproven = LMCAS::equivalent_core(
+    auto exp_ln_unproven = LMCAS::equivalent(
         *exp_ln_y, *y.value(), exp_ln_unproven_context, exp_log_profile);
     ASSERT_FALSE(exp_ln_unproven);
     EXPECT_EQ(exp_ln_unproven.error().code, CasErrc::Inconclusive);
@@ -398,9 +442,9 @@ TEST(ExprEquivalence, ExponentialLogarithmDomainEvidence) {
     auto set_positive_assumptions =
         exp_ln_positive_context.set_assumptions(positive_assumptions);
     EXPECT_TRUE((set_positive_assumptions.has_value())) << "equivalence context accepts positive assumptions";
-    auto exp_ln_positive = LMCAS::equivalent_core(
+    auto exp_ln_positive = LMCAS::equivalent(
         *exp_ln_y, *y.value(), exp_ln_positive_context, exp_log_profile);
-    EXPECT_TRUE((exp_ln_positive && exp_ln_positive.value())) << "equivalent_core proves ExpLog-Basic exp(ln(y)) for positive y";
+    EXPECT_TRUE((exp_ln_positive && exp_ln_positive.value())) << "equivalent proves ExpLog-Basic exp(ln(y)) for positive y";
 }
 
 TEST(ExprEquivalence, ProvesDistinctPolynomialAndPropagatesUnknownProof) {

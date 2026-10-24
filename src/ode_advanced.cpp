@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 /**
  * @file ode_advanced.cpp
@@ -83,31 +85,19 @@ static ODESolutionResult solve_variation_of_parameters_core(
     const std::shared_ptr<SymbolicExpr>& g,
     const std::string& x,
     ComputationContext& context)
-{
-    ODESolution result;
-    result.method_used = ODEType::HigherOrder_ConstCoeff;
-    result.constants = {};
-
-    if (!y1 || !y2 || !g) {
-        result.general_solution = nullptr;
-        return result;
-    }
-
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     /// 计算 y₁' 和 y₂'
-    auto y1_prime = y1->differentiate(x);
-    auto y2_prime = y2->differentiate(x);
-
-    if (!y1_prime || !y2_prime) {
-        result.general_solution = nullptr;
-        return result;
-    }
+    auto y1_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(y1), x, transform_budget));
+    auto y2_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(y2), x, transform_budget));
 
     /// 计算 Wronskian: W = y₁·y₂' - y₂·y₁'
     auto term1 = SymbolicExpr::multiply(y1, y2_prime);
     auto term2 = SymbolicExpr::multiply(y2, y1_prime);
     auto W = SymbolicExpr::add(term1,
         SymbolicExpr::multiply(SymbolicExpr::number(-1), term2));
-    W = W->simplify();
+    W = detail::make_expression_ptr(detail::normalize_node(detail::node(W), transform_budget));
     EqvOptions trig_options;
     trig_options.profile = EqvProfile::TrigBasic;
     auto unit_wronskian = check_equivalent(
@@ -120,9 +110,8 @@ static ODESolutionResult solve_variation_of_parameters_core(
         W = SymbolicExpr::number(1);
     }
 
-    if (!W || W->is_zero()) {
-        result.general_solution = nullptr;
-        return result;
+    if (W->is_zero()) {
+        return ODESolution{};
     }
 
     /// 计算 u₁' = -y₂·g(x)/W
@@ -130,13 +119,13 @@ static ODESolutionResult solve_variation_of_parameters_core(
         SymbolicExpr::multiply(SymbolicExpr::number(-1),
             SymbolicExpr::multiply(y2, g)),
         W);
-    u1_prime = u1_prime->simplify();
+    u1_prime = detail::make_expression_ptr(detail::normalize_node(detail::node(u1_prime), transform_budget));
 
     /// 计算 u₂' = y₁·g(x)/W
     auto u2_prime = SymbolicExpr::divide(
         SymbolicExpr::multiply(y1, g),
         W);
-    u2_prime = u2_prime->simplify();
+    u2_prime = detail::make_expression_ptr(detail::normalize_node(detail::node(u2_prime), transform_budget));
 
     Integrator integrator;
     auto u1_value =
@@ -158,10 +147,20 @@ static ODESolutionResult solve_variation_of_parameters_core(
     auto y_p = SymbolicExpr::add(
         SymbolicExpr::multiply(u1, y1),
         SymbolicExpr::multiply(u2, y2));
-    y_p = y_p->simplify();
+    y_p = detail::make_expression_ptr(detail::normalize_node(detail::node(y_p), transform_budget));
 
-    result.general_solution = y_p;
+    ODESolution result{};
+    result.method_used = ODEType::HigherOrder_ConstCoeff;
+    result.general_solution = std::move(y_p);
     return result;
+} catch (const CasError& error) {
+    return ODESolutionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_variation_of_parameters_core");
+} catch (const std::length_error& error) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, error.what(), "solve_variation_of_parameters_core");
+} catch (const std::exception& error) {
+    return ODESolutionResult::failure(CasErrc::InternalInvariant, error.what(), "solve_variation_of_parameters_core");
 }
 
 }

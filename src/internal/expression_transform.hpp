@@ -3,13 +3,28 @@
 #include "computation_context.hpp"
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
-#include "internal/visitors/differentiation_visitor.hpp"
+#include "internal/facts_query.hpp"
+#include "internal/rewrite_budget.hpp"
 #include <exception>
 #include <memory>
 #include <string>
 #include <utility>
 
 namespace LMCAS::detail {
+
+LMCAS_API SymbolicNodePtr normalize_node(
+    const SymbolicNodePtr& node, RewriteBudget& budget,
+    const FactsQuery& facts = no_facts(), Domain domain = Domain::Real);
+LMCAS_API SymbolicNodePtr expand_node(
+    const SymbolicNodePtr& node, RewriteBudget& budget,
+    const FactsQuery& facts = no_facts(), Domain domain = Domain::Real);
+LMCAS_API SymbolicNodePtr differentiate_node(
+    const SymbolicNodePtr& node, const std::string& variable, RewriteBudget& budget,
+    const FactsQuery& facts = no_facts(), Domain domain = Domain::Real);
+LMCAS_API SymbolicNodePtr substitute_node(
+    const SymbolicNodePtr& node, const std::string& variable,
+    const SymbolicNodePtr& replacement, RewriteBudget& budget,
+    const FactsQuery& facts = no_facts(), Domain domain = Domain::Real);
 
 template <typename Transform>
 ExpressionResult checked_transform_expr(const ExprPtr& expression,
@@ -41,11 +56,11 @@ ExpressionResult checked_transform_expr(const ExprPtr& expression,
                                          std::string(transform_name) +
                                              " allocation failed",
                                          operation);
-    } catch (const detail::UnsupportedDifferentiation& error) {
-        return ExpressionResult::failure(CasErrc::UnsupportedExpression, error.what(),
+    } catch (const std::length_error& error) {
+        return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(),
                                          operation);
     } catch (const std::exception& error) {
-        return ExpressionResult::failure(CasErrc::InvalidArgument, error.what(),
+        return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(),
                                          operation);
     }
 }

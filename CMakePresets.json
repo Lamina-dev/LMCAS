@@ -10,14 +10,19 @@
       "name": "strict-base",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "binaryDir": "${sourceDir}/build/strict-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_TESTING": "ON",
         "LMCAS_BUILD_TESTS": "ON",
         "LMCAS_BUILD_LMMC_TESTS": "ON",
+        "LMMC_BUILD_TESTS": "ON",
         "LMCAS_BUILD_BENCHMARKS": "OFF",
         "LMCAS_WARNINGS_AS_ERRORS": "ON",
+        "LMCAS_ENABLE_SANITIZERS": "OFF",
+        "LMCAS_ENABLE_TSAN": "OFF",
+        "LMMC_ENABLE_SANITIZERS": "OFF",
+        "LMMC_ENABLE_TSAN": "OFF",
         "LMCAS_LMMP_ASM": "AUTO"
       }
     },
@@ -37,6 +42,7 @@
       },
       "cacheVariables": {
         "LMCAS_ENABLE_SANITIZERS": "ON",
+        "LMMC_ENABLE_SANITIZERS": "ON",
         "LMCAS_LMMP_ASM": "GENERIC"
       }
     },
@@ -51,20 +57,21 @@
       },
       "cacheVariables": {
         "LMCAS_ENABLE_TSAN": "ON",
+        "LMMC_ENABLE_TSAN": "ON",
         "LMCAS_LMMP_ASM": "GENERIC"
       }
     },
     {
       "name": "package",
       "displayName": "Installable LMCAS package",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "inherits": "strict-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/package-install",
         "BUILD_TESTING": "OFF",
         "LMCAS_BUILD_TESTS": "OFF",
         "LMCAS_BUILD_LMMC_TESTS": "OFF",
+        "LMMC_BUILD_TESTS": "OFF",
         "LMCAS_WARNINGS_AS_ERRORS": "ON",
         "LMCAS_LMMP_ASM": "AUTO"
       }
@@ -74,22 +81,22 @@
     {
       "name": "strict-debug",
       "configurePreset": "strict-debug",
-      "jobs": 4
+      "jobs": 2
     },
     {
       "name": "linux-asan-ubsan",
       "configurePreset": "linux-asan-ubsan",
-      "jobs": 4
+      "jobs": 2
     },
     {
       "name": "linux-tsan",
       "configurePreset": "linux-tsan",
-      "jobs": 4
+      "jobs": 2
     },
     {
       "name": "package",
       "configurePreset": "package",
-      "jobs": 4,
+      "jobs": 2,
       "targets": ["install"]
     }
   ],
@@ -99,9 +106,9 @@
       "configurePreset": "strict-debug",
       "output": {
         "outputOnFailure": true,
-        "outputJUnitFile": "${sourceDir}/build/${presetName}/junit.xml"
+        "outputJUnitFile": "${sourceDir}/build/strict-debug/junit.xml"
       },
-      "execution": { "jobs": 4, "timeout": 300 },
+      "execution": { "jobs": 2, "timeout": 300 },
       "environment": { "RC_PARAMS": "seed=42" }
     },
     {
@@ -109,9 +116,9 @@
       "configurePreset": "linux-asan-ubsan",
       "output": {
         "outputOnFailure": true,
-        "outputJUnitFile": "${sourceDir}/build/${presetName}/junit.xml"
+        "outputJUnitFile": "${sourceDir}/build/strict-debug/junit.xml"
       },
-      "execution": { "jobs": 4, "timeout": 300 },
+      "execution": { "jobs": 2, "timeout": 300 },
       "environment": {
         "RC_PARAMS": "seed=42",
         "ASAN_OPTIONS": "detect_leaks=1:strict_string_checks=1",
@@ -123,9 +130,9 @@
       "configurePreset": "linux-tsan",
       "output": {
         "outputOnFailure": true,
-        "outputJUnitFile": "${sourceDir}/build/${presetName}/junit.xml"
+        "outputJUnitFile": "${sourceDir}/build/strict-debug/junit.xml"
       },
-      "execution": { "jobs": 4, "timeout": 300 },
+      "execution": { "jobs": 2, "timeout": 300 },
       "environment": {
         "RC_PARAMS": "seed=42",
         "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"

@@ -12,8 +12,8 @@ public:
     RootRefinement(const std::shared_ptr<SymbolicExpr>& expr,
                    const std::shared_ptr<SymbolicExpr>& derivative,
                    const std::string& var, const IsolatedInterval& interval,
-                   const SolveOptions& opts)
-        : expr_(expr), derivative_(derivative), var_(var), opts_(opts),
+                   const SolveOptions& opts, RewriteBudget& budget)
+        : expr_(expr), derivative_(derivative), var_(var), opts_(opts), budget_(budget),
           lo_(interval.lo), hi_(interval.hi), x_(midpoint()),
           f_lo_(evaluate(lo_)), f_hi_(evaluate(hi_)),
           best_{x_, std::numeric_limits<lmmc_real_t>::max(), 0} {}
@@ -27,13 +27,13 @@ public:
     }
 
     std::optional<NumericRoot> bisect(
-        ComputationContext* context, std::optional<CasError>* failure,
+        std::optional<CasError>* failure,
         bool* complete) {
         if (std::isnan(f_lo_) || std::isnan(f_hi_) || f_lo_ * f_hi_ > 0.0) {
             return root_at(x_, evaluate(x_), 1);
         }
         for (int i = 1; i <= opts_.max_newton_iterations; ++i) {
-            if (!consume_mixed_step(context, failure, complete)) {
+            if (!consume_mixed_step(budget_.context(), failure, complete)) {
                 return std::nullopt;
             }
             const auto mid = midpoint();
@@ -63,13 +63,13 @@ public:
     }
 
     std::optional<NumericRoot> newton(
-        ComputationContext* context, std::optional<CasError>* failure,
+        std::optional<CasError>* failure,
         bool* complete) {
         if (!resample_endpoints()) {
             return std::nullopt;
         }
         for (int i = 1; i <= opts_.max_newton_iterations; ++i) {
-            if (!consume_mixed_step(context, failure, complete)) {
+            if (!consume_mixed_step(budget_.context(), failure, complete)) {
                 return std::nullopt;
             }
             const auto fx = evaluate(x_);
@@ -82,7 +82,7 @@ public:
             if (root) {
                 return root;
             }
-            const auto dfx = mixed_evaluate_at(derivative_, var_, x_);
+            const auto dfx = mixed_evaluate_at(derivative_, var_, x_, budget_);
             if (std::isnan(dfx) || std::fabs(dfx) < 1e-15) {
                 bisection_step();
                 continue;
@@ -109,7 +109,7 @@ private:
     }
 
     lmmc_real_t evaluate(lmmc_real_t x) const {
-        return mixed_evaluate_at(expr_, var_, x);
+        return mixed_evaluate_at(expr_, var_, x, budget_);
     }
 
     std::optional<NumericRoot> root_at(
@@ -185,6 +185,7 @@ private:
     const std::shared_ptr<SymbolicExpr>& derivative_;
     const std::string& var_;
     const SolveOptions& opts_;
+    RewriteBudget& budget_;
     lmmc_real_t lo_;
     lmmc_real_t hi_;
     lmmc_real_t x_;
@@ -199,17 +200,17 @@ std::optional<NumericRoot> refine_root_with_context(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var, const IsolatedInterval& interval,
-    const SolveOptions& opts, ComputationContext* context,
+    const SolveOptions& opts, RewriteBudget& budget,
     std::optional<CasError>* failure, bool* complete) {
-    RootRefinement refinement(expr, derivative, var, interval, opts);
+    RootRefinement refinement(expr, derivative, var, interval, opts, budget);
     auto endpoint = refinement.endpoint_root();
     if (endpoint) {
         return endpoint;
     }
     if (!derivative) {
-        return refinement.bisect(context, failure, complete);
+        return refinement.bisect(failure, complete);
     }
-    return refinement.newton(context, failure, complete);
+    return refinement.newton(failure, complete);
 }
 
 }
@@ -221,8 +222,14 @@ std::optional<NumericRoot> refine_root(
     const std::shared_ptr<SymbolicExpr>& derivative,
     const std::string& var, const IsolatedInterval& interval,
     const SolveOptions& opts) {
-    return detail::refine_root_with_context(
-        expr, derivative, var, interval, opts, nullptr, nullptr, nullptr);
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                context.limits().max_ast_nodes, "refine_root");
+    std::optional<CasError> failure;
+    auto result = detail::refine_root_with_context(
+        expr, derivative, var, interval, opts, budget, &failure, nullptr);
+    if (failure) throw *failure;
+    return result;
 }
 
 }

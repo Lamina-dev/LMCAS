@@ -1,3 +1,5 @@
+#include "internal/expression_transform.hpp"
+#include "internal/expression_analysis.hpp"
 #include "root_of_identity.hpp"
 #include "polynomial_conversion.hpp"
 #include "internal/symbolic_ast.hpp"
@@ -58,17 +60,19 @@ static std::shared_ptr<SymbolicExpr> symbolic_root_term(
 }
 
 static std::shared_ptr<SymbolicExpr> symbolic_poly_to_expr(
-    const Polynomial<SymbolicPolyCoeff>& poly) {
+    const Polynomial<SymbolicPolyCoeff>& poly, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (poly.is_zero()) return SymbolicExpr::number(0);
 
     std::vector<std::shared_ptr<SymbolicExpr>> terms;
     for (int i = poly.degree(); i >= 0; --i) {
         const auto& coeff = poly.coeffs[i];
-        if (coeff == SymbolicPolyCoeff(0)) continue;
 
         auto coeff_expr = coeff.val;
         if (coeff_expr) {
-            if (auto simplified = coeff_expr->simplify()) {
+            if (auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(coeff_expr), transform_budget))) {
                 coeff_expr = simplified;
             }
             if (LMCAS::detail::node(coeff_expr) && coeff_expr->is_zero()) {
@@ -92,12 +96,19 @@ static std::shared_ptr<SymbolicExpr> symbolic_poly_to_expr(
 std::vector<std::shared_ptr<SymbolicExpr>> make_rootof_solutions(
     const Polynomial<SymbolicPolyCoeff>& poly,
     const std::string& var) {
-    if (poly.degree() <= 0) return {};
-    auto polynomial_expression = symbolic_poly_to_expr(poly);
     ComputationContext context;
+    return detail::make_rootof_solutions_impl(poly, var, context);
+}
+
+std::vector<std::shared_ptr<SymbolicExpr>> detail::make_rootof_solutions_impl(
+    const Polynomial<SymbolicPolyCoeff>& poly,
+    const std::string& var, ComputationContext& context) {
+    if (poly.degree() <= 0) return {};
+    auto polynomial_expression = symbolic_poly_to_expr(poly, context);
     auto recognized = recognize_rational_polynomial(
         *polynomial_expression, var, context);
-    if (!recognized || !recognized.value()) return {};
+    if (!recognized) throw recognized.error();
+    if (!recognized.value()) return {};
     auto canonical = recognized.value()->square_free_part().make_monic();
     canonical.variable_name = "_root";
     std::vector<std::shared_ptr<SymbolicExpr>> solutions;

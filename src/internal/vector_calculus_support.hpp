@@ -2,6 +2,7 @@
 
 #include "vector_calculus_types.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/rewrite_budget.hpp"
 
 namespace LMCAS::vector_calculus_detail {
 
@@ -9,14 +10,16 @@ std::vector<std::string> vector_calculus_coord_vars(std::size_t dimension);
 
 VectorField vector_calculus_cross_product_partials(
     const VectorField& parametrization,
-    const std::string& u, const std::string& v);
+    const std::string& u, const std::string& v,
+    detail::RewriteBudget& transform_budget);
 
 std::shared_ptr<SymbolicExpr> vector_calculus_integrate_with_fallback(
     const std::shared_ptr<SymbolicExpr>& integrand,
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& lower,
     const std::shared_ptr<SymbolicExpr>& upper,
-    ComputationContext& context);
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult curve_integral_scalar_strict(
     const std::shared_ptr<SymbolicExpr>& function,
@@ -25,7 +28,8 @@ VectorCalculusExprResult curve_integral_scalar_strict(
     const std::shared_ptr<SymbolicExpr>& lower,
     const std::shared_ptr<SymbolicExpr>& upper,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult curve_integral_vector_strict(
     const VectorField& field,
@@ -34,7 +38,8 @@ VectorCalculusExprResult curve_integral_vector_strict(
     const std::shared_ptr<SymbolicExpr>& lower,
     const std::shared_ptr<SymbolicExpr>& upper,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult surface_integral_scalar_strict(
     const std::shared_ptr<SymbolicExpr>& function,
@@ -46,7 +51,8 @@ VectorCalculusExprResult surface_integral_scalar_strict(
     const std::shared_ptr<SymbolicExpr>& v_lower,
     const std::shared_ptr<SymbolicExpr>& v_upper,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult surface_integral_vector_strict(
     const VectorField& field,
@@ -58,7 +64,8 @@ VectorCalculusExprResult surface_integral_vector_strict(
     const std::shared_ptr<SymbolicExpr>& v_lower,
     const std::shared_ptr<SymbolicExpr>& v_upper,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult greens_theorem_strict(
     const std::shared_ptr<SymbolicExpr>& p,
@@ -69,7 +76,8 @@ VectorCalculusExprResult greens_theorem_strict(
     const std::pair<std::shared_ptr<SymbolicExpr>,
                     std::shared_ptr<SymbolicExpr>>& y_bounds,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult greens_theorem_area_strict(
     const VectorField& parametrization,
@@ -77,7 +85,8 @@ VectorCalculusExprResult greens_theorem_area_strict(
     const std::shared_ptr<SymbolicExpr>& lower,
     const std::shared_ptr<SymbolicExpr>& upper,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult divergence_theorem_strict(
     const VectorField& field,
@@ -89,7 +98,8 @@ VectorCalculusExprResult divergence_theorem_strict(
     const std::pair<std::shared_ptr<SymbolicExpr>,
                     std::shared_ptr<SymbolicExpr>>& z_bounds,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult stokes_theorem_strict(
     const VectorField& field,
@@ -102,12 +112,13 @@ VectorCalculusExprResult stokes_theorem_strict(
     const std::pair<std::shared_ptr<SymbolicExpr>,
                     std::shared_ptr<SymbolicExpr>>& v_bounds,
     ComputationContext& context,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
 
 bool vector_calculus_checked_finite_numeric(
     const std::shared_ptr<SymbolicExpr>& expr,
     double& value,
-    ComputationContext* context = nullptr);
+    ComputationContext& context);
 
 
 Result<void> vector_calculus_validate_expr_vars(
@@ -203,7 +214,9 @@ Result<void> vector_calculus_validate_distinct_vars(
 
 bool vector_calculus_expr_zero_after_substitution(
     const std::shared_ptr<SymbolicExpr>& expr,
-    const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point);
+    const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point,
+    ComputationContext& context,
+    detail::RewriteBudget& transform_budget);
 
 bool vector_calculus_point_has_vars(
     const std::map<std::string, std::shared_ptr<SymbolicExpr>>& point,
@@ -223,11 +236,38 @@ std::shared_ptr<SymbolicExpr> vector_calculus_cross_component(
 VectorCalculusExprResult vector_calculus_simplify_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& operation,
-    const std::string& message);
+    const std::string& message,
+    detail::RewriteBudget& transform_budget);
 
 VectorCalculusExprResult vector_calculus_differentiate_strict(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& variable,
-    const std::string& operation);
+    const std::string& operation,
+    detail::RewriteBudget& transform_budget);
+
+VectorField gradient_impl(const std::shared_ptr<SymbolicExpr>& f,
+    const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+std::shared_ptr<SymbolicExpr> divergence_impl(const VectorField& F,
+    const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+VectorField curl_impl(const VectorField& F,
+    const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+std::shared_ptr<SymbolicExpr> laplacian_impl(const std::shared_ptr<SymbolicExpr>& f,
+    const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+std::shared_ptr<SymbolicExpr> directional_derivative_impl(
+    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
+    const VectorField& direction, int order,
+    detail::RewriteBudget& transform_budget);
+std::shared_ptr<SymbolicExpr> jacobian_impl(
+    const std::vector<std::shared_ptr<SymbolicExpr>>& functions,
+    const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+std::shared_ptr<SymbolicExpr> hessian_impl(
+    const std::shared_ptr<SymbolicExpr>& f, const std::vector<std::string>& vars,
+    detail::RewriteBudget& transform_budget);
+
 
 } // namespace LMCAS::vector_calculus_detail

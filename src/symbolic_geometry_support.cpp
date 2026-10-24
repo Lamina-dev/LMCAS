@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/symbolic_geometry_support.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "numeric_evaluation.hpp"
@@ -80,16 +82,27 @@ Result<void> validate_surface_point(
 ExpressionResult simplify_checked(
     const std::shared_ptr<SymbolicExpr>& expr,
     const std::string& operation,
-    const std::string& message)
-{
+    const std::string& message, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expr || !LMCAS::detail::node(expr)) {
         return ExpressionResult::failure(CasErrc::Inconclusive, message, operation);
     }
-    auto simplified = expr->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expr), transform_budget));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return ExpressionResult::failure(CasErrc::Inconclusive, message, operation);
     }
     return ExpressionResult::success(std::move(simplified));
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 Result<double> numeric_vector_scale_checked(
@@ -167,12 +180,14 @@ Result<void> checked_nonzero_numeric_or_exact(
     const std::string& operation,
     const std::string& domain_message,
     const std::string& inconclusive_message)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expr || !LMCAS::detail::node(expr)) {
         return Result<void>::failure(CasErrc::Inconclusive,
                                      inconclusive_message, operation);
     }
-    auto simplified = expr->simplify();
+    auto simplified = detail::make_expression_ptr(detail::normalize_node(detail::node(expr), transform_budget));
     if (!simplified || !LMCAS::detail::node(simplified)) {
         return Result<void>::failure(CasErrc::Inconclusive,
                                      inconclusive_message, operation);
@@ -200,6 +215,14 @@ Result<void> checked_nonzero_numeric_or_exact(
                                      domain_message, operation);
     }
     return Result<void>::success();
+} catch (const CasError& error) {
+    return Result<void>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<void>::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return Result<void>::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return Result<void>::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 Result<void> validate_line_checked(const LineSymbolic& line,

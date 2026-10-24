@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
-#include <cmath>
 #include <limits>
 #include <cstdint>
 
@@ -136,19 +135,7 @@ static bool tf_is_negation_of(const std::shared_ptr<const SymbolicNode>& node,
             continue;
         }
 
-        bool is_neg_one = false;
-        if (std::holds_alternative<BigInt>(num_node->value())) {
-            is_neg_one = (std::get<BigInt>(num_node->value()) == BigInt(-1));
-        } else if (std::holds_alternative<Rational>(num_node->value())) {
-            is_neg_one = (std::get<Rational>(num_node->value()) == Rational(-1));
-        } else if (std::holds_alternative<lmmc_real_t>(num_node->value())) {
-            lmmc_real_t v = std::get<lmmc_real_t>(num_node->value());
-            int eq;
-            lmmc_double_nearly_equal(v, -1.0, &eq);
-            is_neg_one = (eq != 0);
-        }
-
-        if (is_neg_one) {
+        if (num_node->is_negative_one()) {
             int other_idx = 1 - i;
             return tf_nodes_equal(mul->operands()[other_idx], arg);
         }

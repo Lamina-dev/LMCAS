@@ -132,8 +132,7 @@ ExprResult ExprParser::apply_rootof(const std::vector<ExprPtr>& arguments) {
         LMCAS::detail::node(arguments[1]));
     auto index = std::dynamic_pointer_cast<const NumberNode>(
         LMCAS::detail::node(arguments[2]));
-    if (!variable || variable->is_constant() || !index ||
-        std::holds_alternative<lmmc_real_t>(index->value())) {
+    if (!variable || variable->is_constant() || !index) {
         return fail("RootOf variable and index are invalid");
     }
     BigInt index_value;

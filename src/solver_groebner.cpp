@@ -32,7 +32,8 @@ std::vector<SymbolicExpr> reconstruct_basis(
 std::vector<SymbolicExpr> Solver::groebner_basis(
     const std::vector<SymbolicExpr>& polynomials,
     const std::vector<std::string>& variables) {
-    PolyContext context(variables);
+    ComputationContext computation;
+    PolyContext context(variables, computation);
     auto basis = convert_polynomials(polynomials, context);
     extend_basis(basis, context.ext_vars.size());
     buchberger(basis, context.ext_vars.size());
@@ -42,11 +43,17 @@ std::vector<SymbolicExpr> Solver::groebner_basis(
 std::vector<SymbolicExpr> Solver::reduced_groebner_basis(
     const std::vector<SymbolicExpr>& polynomials,
     const std::vector<std::string>& variables) {
-    auto expressions = groebner_basis(polynomials, variables);
-    if (expressions.empty()) return {};
-    PolyContext context(variables);
-    auto basis = convert_polynomials(expressions, context);
+    ComputationContext context;
+    return groebner_detail::reduced_groebner_basis_impl(polynomials, variables, context);
+}
+
+std::vector<SymbolicExpr> groebner_detail::reduced_groebner_basis_impl(
+    const std::vector<SymbolicExpr>& polynomials,
+    const std::vector<std::string>& variables, ComputationContext& computation) {
+    PolyContext context(variables, computation);
+    auto basis = convert_polynomials(polynomials, context);
     extend_basis(basis, context.ext_vars.size());
+    buchberger(basis, context.ext_vars.size());
     reduce_basis(basis);
     return reconstruct_basis(basis, context);
 }
@@ -54,7 +61,8 @@ std::vector<SymbolicExpr> Solver::reduced_groebner_basis(
 bool Solver::ideal_membership(const SymbolicExpr& polynomial,
                               const std::vector<SymbolicExpr>& basis,
                               const std::vector<std::string>& variables) {
-    PolyContext context(variables);
+    ComputationContext computation;
+    PolyContext context(variables, computation);
     auto converted_basis = convert_polynomials(basis, context);
     auto converted = to_poly(polynomial, context);
     extend_basis(converted_basis, context.ext_vars.size());
@@ -74,7 +82,8 @@ std::vector<SymbolicExpr> Solver::elimination_ideal(
         return {};
     }
 
-    PolyContext ctx(variables);
+    ComputationContext computation;
+    PolyContext ctx(variables, computation);
     std::vector<SymbolicExpr> result;
 
     for (const auto& expr : basis) {

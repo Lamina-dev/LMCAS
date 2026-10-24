@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 
 namespace LMCAS {
@@ -113,7 +114,7 @@ std::optional<std::shared_ptr<const SymbolicNode>> LimitVisitor::logarithmic_rem
     if (!has_variable) {
         return std::nullopt;
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     make_product_or_one(values)->accept(norm);
     return norm.get_result();
 }
@@ -213,7 +214,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::trigonometric_remaining_limit(
         values.push_back(value);
     }
     values.push_back(LMCAS::detail::make_node<NumberNode>(BigInt(1)));
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     make_product_or_one(values)->accept(norm);
     return norm.get_result();
 }

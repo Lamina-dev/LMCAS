@@ -62,14 +62,7 @@ struct SymbolicPolyCoeff {
     explicit SymbolicPolyCoeff(int value) : val(SymbolicExpr::number(value)) {}
     SymbolicPolyCoeff(std::shared_ptr<SymbolicExpr> value) : val(std::move(value)) {}
 
-    bool operator==(const SymbolicPolyCoeff& other) const {
-        if (!val || !other.val) return false;
-        if (val == other.val) return true;
-        auto difference = SymbolicExpr::add(
-            val,
-            SymbolicExpr::multiply(other.val, SymbolicExpr::number(-1)));
-        return difference->simplify()->is_zero();
-    }
+    LMCAS_API bool operator==(const SymbolicPolyCoeff& other) const;
 
     bool operator!=(const SymbolicPolyCoeff& other) const {
         return !(*this == other);

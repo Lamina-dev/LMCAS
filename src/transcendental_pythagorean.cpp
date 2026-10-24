@@ -1,5 +1,4 @@
 #include "internal/transcendental_support.hpp"
-#include "lmmc/numeric_scalar.h"
 
 #include <string>
 #include <vector>
@@ -30,17 +29,9 @@ static bool tf_is_trig_squared(
         return false;
     }
 
-    bool is_two = false;
-    if (std::holds_alternative<BigInt>(exp_num->value())) {
-        is_two = (std::get<BigInt>(exp_num->value()) == BigInt(2));
-    } else if (std::holds_alternative<Rational>(exp_num->value())) {
-        is_two = (std::get<Rational>(exp_num->value()) == Rational(2));
-    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-        lmmc_real_t v = std::get<lmmc_real_t>(exp_num->value());
-        int eq;
-        lmmc_double_nearly_equal(v, 2.0, &eq);
-        is_two = (eq != 0);
-    }
+    const bool is_two = std::holds_alternative<BigInt>(exp_num->value())
+        ? std::get<BigInt>(exp_num->value()) == BigInt(2)
+        : std::get<Rational>(exp_num->value()) == Rational(2);
     if (!is_two) {
         return false;
     }

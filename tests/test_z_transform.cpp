@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "transform_engine.hpp"
 #include "residual_verification.hpp"
@@ -10,7 +11,7 @@ static double z_value(const std::shared_ptr<SymbolicExpr> &sequence, double z) {
     EXPECT_TRUE((result.has_value())) << "supported sequence has an evaluated Z transform";
     if (!result)
         return std::numeric_limits<double>::quiet_NaN();
-    return result.value().value.expression->substitute("z", SymbolicExpr::number(z))->simplify()->to_numeric();
+    return LMCAS::simplify(LMCAS::substitute(result.value().value.expression, "z", SymbolicExpr::number(z)).value()).value()->to_numeric();
 }
 
 TEST(ZTransform, ConstantSequences) {
@@ -52,9 +53,9 @@ TEST(ZTransform, CubicSequence) {
     auto formula = check_equivalent(value, SymbolicExpr::divide(numerator, denominator), context);
     ASSERT_TRUE(formula);
     EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(formula.value()));
-    EXPECT_NEAR(value->substitute("z", SymbolicExpr::number(2))->simplify()->to_numeric(),
+    EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(value, "z", SymbolicExpr::number(2)).value()).value()->to_numeric(),
                 26.0, 1e-12) << "Z{n^3}(2)=26";
-    EXPECT_NEAR(value->substitute("z", SymbolicExpr::number(-2))->simplify()->to_numeric(),
+    EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(value, "z", SymbolicExpr::number(-2)).value()).value()->to_numeric(),
                 2.0 / 27.0, 1e-12);
 
     const auto& roc = result.value().value.roc;
@@ -64,9 +65,9 @@ TEST(ZTransform, CubicSequence) {
     EXPECT_EQ(boundary->op(), RelationalNode::Op::GT);
     auto lhs = detail::make_expression_ptr(boundary->left());
     auto rhs = detail::make_expression_ptr(boundary->right());
-    EXPECT_NEAR(lhs->substitute("z", SymbolicExpr::number(-2))->simplify()->to_numeric(),
+    EXPECT_NEAR(LMCAS::simplify(LMCAS::substitute(lhs, "z", SymbolicExpr::number(-2)).value()).value()->to_numeric(),
                 2.0, 1e-12);
-    EXPECT_NEAR(rhs->simplify()->to_numeric(), 1.0, 1e-12);
+    EXPECT_NEAR(LMCAS::simplify(rhs).value()->to_numeric(), 1.0, 1e-12);
 }
 
 TEST(ZTransform, PolynomialExponentMustBeExactIntegerTwo) {

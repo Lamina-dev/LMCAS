@@ -1,5 +1,7 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "integration.hpp"
+#include "residual_verification.hpp"
 #include "rational.hpp"
 #include "bigint.hpp"
 
@@ -111,14 +113,14 @@ static void compare_roundtrip_samples(ComboReport &rep,
                                       const std::shared_ptr<SymbolicExpr> &result) {
     for (double xv : sample_points()) {
         auto x_val = SymbolicExpr::number(xv);
-        auto integrand_at = integrand_simp->substitute(kVarName, x_val);
-        auto deriv_at = deriv_simp->substitute(kVarName, x_val);
+        auto integrand_at = LMCAS::substitute(integrand_simp, kVarName, x_val).value();
+        auto deriv_at = LMCAS::substitute(deriv_simp, kVarName, x_val).value();
         if (!integrand_at || !deriv_at) {
             ++rep.skipped;
             continue;
         }
-        integrand_at = integrand_at->simplify();
-        deriv_at = deriv_at->simplify();
+        integrand_at = LMCAS::simplify(integrand_at).value();
+        deriv_at = LMCAS::simplify(deriv_at).value();
 
         auto pv = test_numeric_eval(integrand_at);
         auto dv = test_numeric_eval(deriv_at);
@@ -159,7 +161,8 @@ ComboReport verify_combo(const Pattern &pat, const ABPair &ab) {
 
     // Integrate.
     Integrator integ;
-    auto integrated = integ.integrate(*integrand_ptr, kVarName);
+    ComputationContext context;
+    auto integrated = integ.integrate_checked(*integrand_ptr, kVarName, context);
     if (!integrated) {
         rep.failed = true;
         rep.detail = std::string("integration failed: ") + integrated.error().message;
@@ -167,8 +170,6 @@ ComboReport verify_combo(const Pattern &pat, const ABPair &ab) {
     }
     auto result = LMCAS::detail::make_expression_ptr(integrated.value());
 
-    // Combinations that left an unevaluated integral are not evidence for
-    // the round-trip property; they fall outside its conditional scope.
     if (LMCAS::detail::contains_node_type<IntegralNode>(
             LMCAS::detail::node(result))) {
         rep.unevaluated = true;
@@ -176,18 +177,24 @@ ComboReport verify_combo(const Pattern &pat, const ABPair &ab) {
         return rep;
     }
 
-    auto deriv = result->differentiate(kVarName);
+    auto deriv = LMCAS::differentiate(result, kVarName).value();
     if (!deriv) {
         rep.failed = true;
         rep.detail = "differentiation returned null";
         return rep;
     }
-    auto deriv_simp = deriv->simplify();
+    auto proof = check_equivalent(deriv, integrand_ptr, context);
+    if (!proof || !std::holds_alternative<ProvedZeroResidual>(proof.value())) {
+        rep.failed = true;
+        rep.detail = proof ? "derivative residual was not proved zero" : proof.error().message;
+        return rep;
+    }
+    auto deriv_simp = LMCAS::simplify(deriv).value();
     if (!deriv_simp) {
         deriv_simp = deriv;
     }
 
-    auto integrand_simp = integrand_ptr->simplify();
+    auto integrand_simp = LMCAS::simplify(integrand_ptr).value();
     if (!integrand_simp) {
         integrand_simp = integrand_ptr;
     }

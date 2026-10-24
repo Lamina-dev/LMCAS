@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "interval.hpp"
 #include "test_common.hpp"
 
@@ -123,29 +124,24 @@ static bool is_exact_rational_number(
 }
 
 TEST(IntervalChecked, SquareRootExactness) {
-    auto exact_irrational = SymbolicExpr::sqrt(SymbolicExpr::number(2))->simplify();
+    auto exact_irrational = LMCAS::simplify(SymbolicExpr::sqrt(SymbolicExpr::number(2))).value();
     auto exact_irrational_number = square_root_number(exact_irrational);
-    EXPECT_TRUE((exact_irrational &&
-                 (!exact_irrational_number ||
-                  !std::holds_alternative<lmmc_real_t>(
-                      exact_irrational_number->value()))))
-        << "sqrt of an exact non-square never becomes ApproxReal";
+    EXPECT_TRUE(exact_irrational && !exact_irrational_number)
+        << "sqrt of an exact non-square remains symbolic";
 
-    auto exact_rational_root = SymbolicExpr::sqrt(
-                                   SymbolicExpr::number(Rational(4, 9)))
-                                   ->simplify();
+    auto exact_rational_root = LMCAS::simplify(SymbolicExpr::sqrt(
+                                   SymbolicExpr::number(Rational(4, 9)))).value();
     auto exact_rational_number = square_root_number(exact_rational_root);
     EXPECT_TRUE((is_exact_rational_number(exact_rational_number, 2, 3))) << "sqrt of an exact rational square remains exact";
 
-    auto approximate_root = SymbolicExpr::sqrt(
-                                SymbolicExpr::number(2.0))
-                                ->simplify();
-    auto approximate_number = square_root_number(approximate_root);
-    EXPECT_TRUE((approximate_number &&
-                 std::holds_alternative<lmmc_real_t>(approximate_number->value()) &&
-                 std::abs(std::get<lmmc_real_t>(approximate_number->value()) -
-                          std::sqrt(2.0)) < 1e-12))
-        << "sqrt of an explicit ApproxReal remains an approximate operation";
+    auto approximate_root = LMCAS::simplify(SymbolicExpr::sqrt(
+                                SymbolicExpr::number(2.0))).value();
+    EXPECT_TRUE(approximate_root && !square_root_number(approximate_root));
+    EXPECT_TRUE(structurally_equal(*approximate_root, *exact_irrational))
+        << "floating input does not numericalize a radical";
+    auto value = evalf(*approximate_root);
+    ASSERT_TRUE(value);
+    EXPECT_DOUBLE_EQ(value.value().value, std::sqrt(2.0));
 }
 
 TEST(IntervalChecked, ElementaryExactness) {
@@ -160,19 +156,18 @@ TEST(IntervalChecked, ElementaryExactness) {
             {FunctionNode::FuncType::Exp, SymbolicExpr::exp(tiny_exact)},
             {FunctionNode::FuncType::Ln, SymbolicExpr::ln(tiny_exact)}};
     for (const auto &[type, expression] : exact_functions) {
-        auto normalized = expression->simplify();
+        auto normalized = LMCAS::simplify(expression).value();
         auto function = normalized
                             ? std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(normalized))
                             : nullptr;
         EXPECT_TRUE((function && function->type() == type)) << "tiny exact elementary-function argument is not tolerance-folded";
     }
 
-    auto exact_abs = LMCAS::detail::make_expression_ptr(
+    auto exact_abs = LMCAS::simplify(LMCAS::detail::make_expression_ptr(
                          LMCAS::detail::make_node<FunctionNode>(
                              FunctionNode::FuncType::Abs,
                              std::vector<std::shared_ptr<const SymbolicNode>>{
-                                 LMCAS::detail::make_node<NumberNode>(Rational(-7, 3))}))
-                         ->simplify();
+                                 LMCAS::detail::make_node<NumberNode>(Rational(-7, 3))}))).value();
     auto exact_abs_number = exact_abs
                                 ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(exact_abs))
                                 : nullptr;
@@ -181,12 +176,11 @@ TEST(IntervalChecked, ElementaryExactness) {
                  std::get<Rational>(exact_abs_number->value()) == Rational(7, 3)))
         << "abs of an exact Rational remains exact";
 
-    auto exact_lambert = LMCAS::detail::make_expression_ptr(
+    auto exact_lambert = LMCAS::simplify(LMCAS::detail::make_expression_ptr(
                              LMCAS::detail::make_node<FunctionNode>(
                                  FunctionNode::FuncType::LambertW,
                                  std::vector<std::shared_ptr<const SymbolicNode>>{
-                                     LMCAS::detail::make_node<NumberNode>(Rational(1))}))
-                             ->simplify();
+                                     LMCAS::detail::make_node<NumberNode>(Rational(1))}))).value();
     auto exact_lambert_function = exact_lambert
                                       ? std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(exact_lambert))
                                       : nullptr;
@@ -194,28 +188,22 @@ TEST(IntervalChecked, ElementaryExactness) {
                  exact_lambert_function->type() == FunctionNode::FuncType::LambertW))
         << "LambertW of an exact non-identity input stays symbolic";
 
-    auto approximate_lambert = LMCAS::detail::make_expression_ptr(
+    auto approximate_lambert = LMCAS::simplify(LMCAS::detail::make_expression_ptr(
                                    LMCAS::detail::make_node<FunctionNode>(
                                        FunctionNode::FuncType::LambertW,
                                        std::vector<std::shared_ptr<const SymbolicNode>>{
-                                           LMCAS::detail::make_node<NumberNode>(1.0)}))
-                                   ->simplify();
-    auto approximate_lambert_number = approximate_lambert
-                                          ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(approximate_lambert))
-                                          : nullptr;
-    EXPECT_TRUE((approximate_lambert_number &&
-                 std::holds_alternative<lmmc_real_t>(
-                     approximate_lambert_number->value())))
-        << "LambertW evaluates only for an explicit ApproxReal input";
+                                           LMCAS::detail::make_node<NumberNode>(1.0)}))).value();
+    EXPECT_TRUE(approximate_lambert &&
+                structurally_equal(*approximate_lambert, *exact_lambert))
+        << "floating input leaves LambertW symbolic";
 }
 
 TEST(IntervalChecked, LargeExactExponents) {
     const BigInt oversized_exponent("9223372036854775808");
-    auto oversized_power = LMCAS::detail::make_expression_ptr(
+    auto oversized_power = LMCAS::simplify(LMCAS::detail::make_expression_ptr(
                                LMCAS::detail::make_node<PowerNode>(
                                    LMCAS::detail::make_node<NumberNode>(BigInt(2)),
-                                   LMCAS::detail::make_node<NumberNode>(oversized_exponent)))
-                               ->simplify();
+                                   LMCAS::detail::make_node<NumberNode>(oversized_exponent)))).value();
     auto preserved_power = oversized_power
                                ? std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(oversized_power))
                                : nullptr;

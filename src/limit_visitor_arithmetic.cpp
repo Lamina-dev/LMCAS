@@ -1,3 +1,5 @@
+#include "internal/rewrite_budget.hpp"
+#include "internal/expression_transform.hpp"
 #include "internal/visitors/limit_visitor.hpp"
 #include "polynomial_conversion.hpp"
 #include <algorithm>
@@ -71,7 +73,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::rationalized_sum_limit(
     };
     auto denominator = SymbolicExpr::multiply(SymbolicExpr::number(denominator_sign),
         SymbolicExpr::add(leading(*a), leading(*b)));
-    return detail::node(SymbolicExpr::divide(SymbolicExpr::number(numerator.lead_coeff()), denominator)->simplify());
+    return detail::normalize_node(detail::node(SymbolicExpr::divide(SymbolicExpr::number(numerator.lead_coeff()), denominator)), *rewrite_budget());
 }
 
 std::pair<std::shared_ptr<const SymbolicNode>, std::shared_ptr<const SymbolicNode>>
@@ -89,7 +91,7 @@ LimitVisitor::combine_sum_ratio(
     }
     auto numerator = terms.size() == 1 ? terms[0] :
         std::static_pointer_cast<const SymbolicNode>(LMCAS::detail::make_node<AddNode>(terms));
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     numerator->accept(norm);
     numerator = norm.get_result();
     common_denominator->accept(norm);
@@ -175,7 +177,7 @@ std::shared_ptr<const SymbolicNode> LimitVisitor::multiply_remaining_limits(
     if (values.size() == 1) {
         return values[0];
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     LMCAS::detail::make_node<MultiplyNode>(values)->accept(norm);
     return norm.get_result();
 }
@@ -274,7 +276,7 @@ void LimitVisitor::visit(const AddNode& node) {
             return;
         }
     }
-    NormalizationVisitor norm(*context_, detail::no_facts(), Domain::Real, rewrite_budget());
+    NormalizationVisitor norm(*rewrite_budget(), detail::no_facts(), Domain::Real);
     LMCAS::detail::make_node<AddNode>(values)->accept(norm);
     result = norm.get_result();
 }

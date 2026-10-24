@@ -36,10 +36,7 @@ public:
             ~Leave() { context.leave_recursion(); }
         } leave{context_};
         if (!node) { return unknown_bounds(); }
-        if (const auto* number = dynamic_cast<const NumberNode*>(node.get())) {
-            if (const auto* value = std::get_if<lmmc_real_t>(&number->value())) {
-                if (!std::isfinite(*value)) { return unknown_bounds(); }
-            }
+        if (dynamic_cast<const NumberNode*>(node.get())) {
             return Result<Interval>::success(
                 Interval::point(detail::make_expression_ptr(node)));
         }

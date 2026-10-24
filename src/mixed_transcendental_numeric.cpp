@@ -1,5 +1,5 @@
 #include "internal/mixed_transcendental_support.hpp"
-#include "internal/visitors/differentiation_visitor.hpp"
+#include "internal/expression_transform.hpp"
 #include <new>
 #include <stdexcept>
 
@@ -22,31 +22,25 @@ Result<std::vector<NumericRoot>> mixed_numerical_path(
     const std::string& var,
     const SearchInterval& interval,
     const SolveOptions& opts,
-    ComputationContext& context,
+    RewriteBudget& budget,
     bool& complete)
 {
     std::vector<NumericRoot> roots;
     std::shared_ptr<SymbolicExpr> derivative;
     try {
         if (factor && LMCAS::detail::node(factor)) {
-            DifferentiationVisitor visitor(var);
-            LMCAS::detail::node(factor)->accept(visitor);
-            auto derivative_node = visitor.get_result();
-            if (derivative_node) {
-                derivative =
-                    LMCAS::detail::make_expression_ptr(derivative_node);
-            }
+            derivative = make_expression_ptr(
+                differentiate_node(node(factor), var, budget));
         }
-    } catch (const std::bad_alloc&) {
-        throw;
-    } catch (const std::logic_error&) {
+    } catch (const CasError& error) {
+        if (error.code != CasErrc::UnsupportedExpression) throw;
         complete = false;
     }
     complete = false;
     std::optional<CasError> failure;
     auto intervals = isolate_roots_with_context(
         factor, derivative, var, interval, opts,
-        &context, &failure, &complete);
+        budget, &failure, &complete);
     if (failure) {
         return Result<std::vector<NumericRoot>>::failure(*failure);
     }
@@ -54,7 +48,7 @@ Result<std::vector<NumericRoot>> mixed_numerical_path(
     for (const auto& isolated : intervals) {
         auto refined = refine_root_with_context(
             factor, derivative, var, isolated, opts,
-            &context, &failure, &complete);
+            budget, &failure, &complete);
         if (failure) {
             return Result<std::vector<NumericRoot>>::failure(*failure);
         }

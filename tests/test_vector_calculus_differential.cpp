@@ -23,13 +23,13 @@ TEST(VectorCalculusDifferential, GradientBasic) {
 
     EXPECT_TRUE((grad.size() == 3)) << "gradient has 3 components";
 
-    auto expected_x = SymbolicExpr::multiply(SymbolicExpr::number(2), x)->simplify();
+    auto expected_x = LMCAS::simplify(SymbolicExpr::multiply(SymbolicExpr::number(2), x)).value();
     EXPECT_TRUE(test_expression_text(grad[0], expected_x)) << "df/dx = 2x";
 
-    auto expected_y = SymbolicExpr::multiply(SymbolicExpr::number(2), y)->simplify();
+    auto expected_y = LMCAS::simplify(SymbolicExpr::multiply(SymbolicExpr::number(2), y)).value();
     EXPECT_TRUE(test_expression_text(grad[1], expected_y)) << "df/dy = 2y";
 
-    auto expected_z = SymbolicExpr::multiply(SymbolicExpr::number(2), z)->simplify();
+    auto expected_z = LMCAS::simplify(SymbolicExpr::multiply(SymbolicExpr::number(2), z)).value();
     EXPECT_TRUE(test_expression_text(grad[2], expected_z)) << "df/dz = 2z";
 }
 
@@ -48,7 +48,7 @@ TEST(VectorCalculusDifferential, GradientMixed) {
 
     EXPECT_TRUE(test_expression_text(grad[0], y)) << "df/dx = y";
 
-    auto expected_y = SymbolicExpr::add(x, z)->simplify();
+    auto expected_y = LMCAS::simplify(SymbolicExpr::add(x, z)).value();
     EXPECT_TRUE(test_expression_text(grad[1], expected_y)) << "df/dy = x + z";
 
     EXPECT_TRUE(test_expression_text(grad[2], y)) << "df/dz = y";
@@ -66,12 +66,11 @@ TEST(VectorCalculusDifferential, DivergenceBasic) {
 
     auto div = divergence(F, {"x", "y", "z"});
 
-    auto expected = SymbolicExpr::add(
+    auto expected = LMCAS::simplify(SymbolicExpr::add(
                         SymbolicExpr::add(
                             SymbolicExpr::multiply(SymbolicExpr::number(2), x),
                             SymbolicExpr::multiply(SymbolicExpr::number(2), y)),
-                        SymbolicExpr::multiply(SymbolicExpr::number(2), z))
-                        ->simplify();
+                        SymbolicExpr::multiply(SymbolicExpr::number(2), z))).value();
 
     EXPECT_TRUE(test_expression_text(div, expected)) << "div(x^2, y^2, z^2) = 2x + 2y + 2z";
 }
@@ -141,10 +140,10 @@ TEST(VectorCalculusDifferential, CurlGradIsZero) {
         if (val.has_value()) {
             EXPECT_NEAR(*val, 0.0, 1e-10) << "curl(grad(f))_" + std::to_string(i) + " = 0 (numeric)";
         } else {
-            auto test_expr = c[i]->substitute("x", SymbolicExpr::number(2));
-            test_expr = test_expr->substitute("y", SymbolicExpr::number(3));
-            test_expr = test_expr->substitute("z", SymbolicExpr::number(5));
-            test_expr = test_expr->simplify();
+            auto test_expr = LMCAS::substitute(c[i], "x", SymbolicExpr::number(2)).value();
+            test_expr = LMCAS::substitute(test_expr, "y", SymbolicExpr::number(3)).value();
+            test_expr = LMCAS::substitute(test_expr, "z", SymbolicExpr::number(5)).value();
+            test_expr = LMCAS::simplify(test_expr).value();
             EXPECT_TRUE((test_expr->is_zero())) << "curl(grad(f))_" + std::to_string(i) + " = 0 (at point)";
         }
     }
@@ -197,13 +196,13 @@ TEST(VectorCalculusDifferential, LaplacianEqualsDivGrad) {
     auto grad_f = gradient(f, {"x", "y"});
     auto div_grad = divergence(grad_f, {"x", "y"});
 
-    auto lap_at = lap->substitute("x", SymbolicExpr::number(2));
-    lap_at = lap_at->substitute("y", SymbolicExpr::number(3));
-    lap_at = lap_at->simplify();
+    auto lap_at = LMCAS::substitute(lap, "x", SymbolicExpr::number(2)).value();
+    lap_at = LMCAS::substitute(lap_at, "y", SymbolicExpr::number(3)).value();
+    lap_at = LMCAS::simplify(lap_at).value();
 
-    auto dg_at = div_grad->substitute("x", SymbolicExpr::number(2));
-    dg_at = dg_at->substitute("y", SymbolicExpr::number(3));
-    dg_at = dg_at->simplify();
+    auto dg_at = LMCAS::substitute(div_grad, "x", SymbolicExpr::number(2)).value();
+    dg_at = LMCAS::substitute(dg_at, "y", SymbolicExpr::number(3)).value();
+    dg_at = LMCAS::simplify(dg_at).value();
 
     auto v1 = test_numeric_eval(lap_at);
     auto v2 = test_numeric_eval(dg_at);
@@ -223,9 +222,9 @@ TEST(VectorCalculusDifferential, DirectionalDerivativeAxis) {
     auto dd = directional_derivative(f, {"x", "y"}, dir);
     EXPECT_TRUE((dd != nullptr)) << "directional derivative is not null";
 
-    auto dd_at = dd->substitute("x", SymbolicExpr::number(3));
-    dd_at = dd_at->substitute("y", SymbolicExpr::number(5));
-    dd_at = dd_at->simplify();
+    auto dd_at = LMCAS::substitute(dd, "x", SymbolicExpr::number(3)).value();
+    dd_at = LMCAS::substitute(dd_at, "y", SymbolicExpr::number(5)).value();
+    dd_at = LMCAS::simplify(dd_at).value();
     auto val = test_numeric_eval(dd_at);
     EXPECT_TRUE((val.has_value() && std::abs(*val - 6.0) < 1e-10)) << "D_(1,0) f at (3,5) = 2*3 = 6";
 }
@@ -245,7 +244,7 @@ TEST(VectorCalculusDifferential, DirectionalDerivativeNormalization) {
     if (val.has_value()) {
         EXPECT_NEAR(*val, 1.4, 1e-10) << "D_(3,4) (x+y) = 7/5 = 1.4";
     } else {
-        auto dd_s = dd->simplify();
+        auto dd_s = LMCAS::simplify(dd).value();
         auto val2 = test_numeric_eval(dd_s);
         EXPECT_TRUE((val2.has_value() && std::abs(*val2 - 1.4) < 1e-10)) << "D_(3,4) (x+y) = 7/5 after simplify";
     }
@@ -272,8 +271,8 @@ TEST(VectorCalculusDifferential, DirectionalDerivativeHigherOrder) {
     auto dd2 = directional_derivative(f, {"x"}, dir, 2);
     EXPECT_TRUE((dd2 != nullptr)) << "second order derivative is not null";
 
-    auto dd2_at = dd2->substitute("x", SymbolicExpr::number(4));
-    dd2_at = dd2_at->simplify();
+    auto dd2_at = LMCAS::substitute(dd2, "x", SymbolicExpr::number(4)).value();
+    dd2_at = LMCAS::simplify(dd2_at).value();
     auto val = test_numeric_eval(dd2_at);
     EXPECT_TRUE((val.has_value() && std::abs(*val - 24.0) < 1e-10)) << "D^2_(1) x^3 at x=4 = 6*4 = 24";
 }
@@ -295,10 +294,10 @@ TEST(VectorCalculusDifferential, DivCurlIsZero) {
     if (val.has_value()) {
         EXPECT_NEAR(*val, 0.0, 1e-10) << "div(curl(F)) = 0 (numeric)";
     } else {
-        auto test_expr = div_curl->substitute("x", SymbolicExpr::number(2));
-        test_expr = test_expr->substitute("y", SymbolicExpr::number(3));
-        test_expr = test_expr->substitute("z", SymbolicExpr::number(5));
-        test_expr = test_expr->simplify();
+        auto test_expr = LMCAS::substitute(div_curl, "x", SymbolicExpr::number(2)).value();
+        test_expr = LMCAS::substitute(test_expr, "y", SymbolicExpr::number(3)).value();
+        test_expr = LMCAS::substitute(test_expr, "z", SymbolicExpr::number(5)).value();
+        test_expr = LMCAS::simplify(test_expr).value();
         auto v = test_numeric_eval(test_expr);
         EXPECT_TRUE((v.has_value() && std::abs(*v) < 1e-10)) << "div(curl(F)) = 0 at (2,3,5)";
     }
@@ -407,17 +406,17 @@ TEST(VectorCalculusDifferential, UnsupportedDerivativeErrors) {
     auto grad = gradient_checked(floor_x, {"x"}, context);
     ASSERT_FALSE(grad.has_value());
     EXPECT_EQ(grad.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(grad.error().operation, "gradient");
+    EXPECT_EQ(grad.error().operation, "LMCAS.differentiate");
 
     auto div = divergence_checked({floor_x}, {"x"});
     ASSERT_FALSE(div.has_value());
     EXPECT_EQ(div.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(div.error().operation, "divergence");
+    EXPECT_EQ(div.error().operation, "LMCAS.differentiate");
 
     auto curl_2d = curl_checked({zero, floor_x}, {"x", "y"});
     ASSERT_FALSE(curl_2d.has_value());
     EXPECT_EQ(curl_2d.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(curl_2d.error().operation, "curl");
+    EXPECT_EQ(curl_2d.error().operation, "LMCAS.differentiate");
 
     const auto floor_y_result = LMCAS::floor(SymbolicExpr::variable("y"));
     ASSERT_TRUE(floor_y_result.has_value());
@@ -425,19 +424,19 @@ TEST(VectorCalculusDifferential, UnsupportedDerivativeErrors) {
     auto curl_3d = curl_checked({zero, zero, floor_y}, {"x", "y", "z"});
     ASSERT_FALSE(curl_3d.has_value());
     EXPECT_EQ(curl_3d.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(curl_3d.error().operation, "curl");
+    EXPECT_EQ(curl_3d.error().operation, "LMCAS.differentiate");
 
     auto lap = laplacian_checked(floor_x, {"x"});
     ASSERT_FALSE(lap.has_value());
     EXPECT_EQ(lap.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(lap.error().operation, "laplacian");
+    EXPECT_EQ(lap.error().operation, "LMCAS.differentiate");
 
     auto directional = directional_derivative_checked(
         floor_x, {"x"}, {SymbolicExpr::number(1)}, 1);
     ASSERT_FALSE(directional.has_value());
     EXPECT_EQ(directional.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(directional.error().operation, "directional_derivative");
-    EXPECT_THROW(gradient(floor_x, {"x"}), std::runtime_error);
+    EXPECT_EQ(directional.error().operation, "LMCAS.differentiate");
+    EXPECT_THROW(gradient(floor_x, {"x"}), CasError);
 }
 
 TEST(VectorCalculusDifferential, UnsupportedSecondDerivative) {
@@ -453,12 +452,48 @@ TEST(VectorCalculusDifferential, UnsupportedSecondDerivative) {
     auto lap = laplacian_checked(integral, {"x"});
     ASSERT_FALSE(lap.has_value());
     EXPECT_EQ(lap.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(lap.error().operation, "laplacian");
+    EXPECT_EQ(lap.error().operation, "LMCAS.differentiate");
 
     auto directional = directional_derivative_checked(
         integral, {"x"}, {SymbolicExpr::number(1)}, 2);
     ASSERT_FALSE(directional.has_value());
     EXPECT_EQ(directional.error().code, CasErrc::UnsupportedExpression);
-    EXPECT_EQ(directional.error().operation, "directional_derivative");
-    EXPECT_THROW(laplacian(integral, {"x"}), std::runtime_error);
+    EXPECT_EQ(directional.error().operation, "LMCAS.differentiate");
+    EXPECT_THROW(laplacian(integral, {"x"}), CasError);
+}
+
+TEST(VectorCalculusDifferential, CheckedTransformsUseRemainingBudget) {
+    auto x = SymbolicExpr::variable("x");
+    auto expression = SymbolicExpr::power(x, SymbolicExpr::number(2));
+    const auto expect_limited = [](auto solve, std::size_t steps) {
+        ResourceLimits limits;
+        limits.max_steps = steps;
+        ComputationContext context(limits);
+        auto result = solve(context);
+        ASSERT_FALSE(result);
+        EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
+        EXPECT_EQ(context.recursion_depth(), 0u);
+    };
+    expect_limited([&](ComputationContext& context) {
+        return gradient_checked(expression, {"x"}, context);
+    }, 2);
+    expect_limited([&](ComputationContext& context) {
+        return divergence_checked({expression}, {"x"}, context);
+    }, 2);
+    expect_limited([&](ComputationContext& context) {
+        return curl_checked({expression, expression}, {"x", "y"}, context);
+    }, 3);
+    expect_limited([&](ComputationContext& context) {
+        return laplacian_checked(expression, {"x"}, context);
+    }, 3);
+    expect_limited([&](ComputationContext& context) {
+        return directional_derivative_checked(
+            expression, {"x"}, {SymbolicExpr::number(1)}, 1, context);
+    }, 3);
+    expect_limited([&](ComputationContext& context) {
+        return jacobian_checked({expression}, {"x"}, context);
+    }, 2);
+    expect_limited([&](ComputationContext& context) {
+        return hessian_checked(expression, {"x"}, context);
+    }, 2);
 }

@@ -25,13 +25,7 @@ ExprResult simplify(const ExprPtr& expression) {
 }
 
 ExprResult expand(const ExprPtr& expression, ComputationContext& context) {
-    return detail::checked_transform_expr(
-        expression, context, kExpandOperation, "expand",
-        [&context](const SymbolicExpr& value) {
-            auto expanded = value.expand();
-            const auto& assumptions = context.assumptions();
-            return assumptions ? assumptions->simplify(*expanded) : expanded;
-        });
+    return detail::expand_expression(expression, context);
 }
 
 ExprResult expand(const ExprPtr& expression) {
@@ -47,11 +41,7 @@ ExprResult differentiate(const ExprPtr& expression,
                                   "differentiate variable cannot be empty",
                                   kDifferentiateOperation);
     }
-    return detail::checked_transform_expr(
-        expression, context, kDifferentiateOperation, "differentiate",
-        [&variable](const SymbolicExpr& value) {
-            return value.differentiate(variable);
-        });
+    return detail::differentiate_expression(expression, variable, context);
 }
 
 ExprResult differentiate(const ExprPtr& expression,
@@ -81,22 +71,7 @@ ExprResult substitute(const ExprPtr& expression,
                                   "substitution value cannot be null",
                                   kSubstituteOperation);
     }
-    try {
-        auto result = expression->substitute(variable, value);
-        if (!result || !LMCAS::detail::node(result)) {
-            return expression_failure(CasErrc::InternalInvariant,
-                                      "substitution returned an empty expression",
-                                      kSubstituteOperation);
-        }
-        return ExprResult::success(std::move(result));
-    } catch (const std::bad_alloc&) {
-        return expression_failure(CasErrc::ResourceLimit,
-                                  "substitution allocation failed",
-                                  kSubstituteOperation);
-    } catch (const std::exception& error) {
-        return expression_failure(CasErrc::InternalInvariant, error.what(),
-                                  kSubstituteOperation);
-    }
+    return detail::substitute_expression(expression, variable, value, context);
 }
 
 ExprResult substitute(const ExprPtr& expression,
@@ -147,18 +122,7 @@ ExprResult substitute(const ExprPtr& expression,
 ExprResult substitute(const ExprPtr& expression,
                       const std::vector<Binding>& replacements,
                       ComputationContext& context) {
-    if (!expression || !LMCAS::detail::node(expression)) {
-        return expression_failure(CasErrc::InvalidArgument,
-                                  "expression cannot be null",
-                                  kSubstituteOperation);
-    }
-    auto result = expression;
-    for (const auto& replacement : replacements) {
-        auto next = substitute(result, replacement, context);
-        if (!next) return next;
-        result = std::move(next.value());
-    }
-    return ExprResult::success(std::move(result));
+    return detail::substitute_expression(expression, replacements, context);
 }
 
 ExprResult substitute(const ExprPtr& expression,

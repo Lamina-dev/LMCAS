@@ -1,4 +1,8 @@
+#include "internal/expression_analysis.hpp"
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "internal/integration_support.hpp"
+#include "internal/assumption_facts.hpp"
 
 namespace LMCAS {
 
@@ -14,63 +18,65 @@ std::optional<SymbolicExpr> substitution_argument(const SymbolicExpr& term) {
     return std::nullopt;
 }
 
-std::shared_ptr<SymbolicExpr> substitution_primitive(
-    const SymbolicExpr& candidate_term, const SymbolicExpr& u) {
-                if (auto pow = std::dynamic_pointer_cast<const PowerNode>(LMCAS::detail::node(candidate_term))) {
-                    auto n = LMCAS::detail::expression_from_node(pow->exponent());
-                    auto np1 = SymbolicExpr::add(detail::make_expression_ptr(n), SymbolicExpr::number(1))->simplify();
-                    if (np1->is_zero()) {
-                        return SymbolicExpr::ln(detail::make_expression_ptr(u));
-                    } else {
-                        return SymbolicExpr::divide(
-                            SymbolicExpr::power(detail::make_expression_ptr(u), np1), np1);
-                    }
-                } else if (auto func = std::dynamic_pointer_cast<const FunctionNode>(LMCAS::detail::node(candidate_term))) {
-                    if (func->type() == FunctionNode::FuncType::Cos) {
-                        return SymbolicExpr::sin(detail::make_expression_ptr(u));
-                    } else if (func->type() == FunctionNode::FuncType::Sin) {
-                        return SymbolicExpr::multiply(SymbolicExpr::number(-1), SymbolicExpr::cos(detail::make_expression_ptr(u)));
-                    } else if (func->type() == FunctionNode::FuncType::Exp) {
-                        return SymbolicExpr::exp(detail::make_expression_ptr(u));
-                    }
-                }
+Result<std::shared_ptr<SymbolicExpr>> substitution_primitive(
+    const SymbolicExpr& candidate_term, const SymbolicExpr& u,
+    const std::string& var, ComputationContext& context) {
+    if (auto power = std::dynamic_pointer_cast<const PowerNode>(detail::node(candidate_term))) {
+        auto primitive = detail::integrate_power_primitive(u,
+            detail::expression_from_node(power->exponent()), var, context);
+        if (!primitive) {
+            return Result<std::shared_ptr<SymbolicExpr>>::failure(primitive.error());
+        }
+        return primitive.value() ? detail::make_expression_ptr(*primitive.value()) : nullptr;
+    }
+    if (auto function = std::dynamic_pointer_cast<const FunctionNode>(detail::node(candidate_term))) {
+        if (function->type() == FunctionNode::FuncType::Cos) {
+            return SymbolicExpr::sin(detail::make_expression_ptr(u));
+        }
+        if (function->type() == FunctionNode::FuncType::Sin) {
+            return SymbolicExpr::multiply(SymbolicExpr::number(-1),
+                SymbolicExpr::cos(detail::make_expression_ptr(u)));
+        }
+        if (function->type() == FunctionNode::FuncType::Exp) {
+            return SymbolicExpr::exp(detail::make_expression_ptr(u));
+        }
+    }
     return nullptr;
 }
 
 Result<std::shared_ptr<SymbolicExpr>> substitute_candidate(
     const SymbolicExpr& expr, const SymbolicExpr& candidate_term,
-    const std::string& var, ComputationContext& computation) {
+    const std::string& var, ComputationContext& computation) try {
+    detail::RewriteBudget transform_budget(computation, (computation).limits().max_recursion_depth,
+                                            (computation).limits().max_ast_nodes, "transform");
     auto u = substitution_argument(candidate_term);
     if (!u || !depends_on_integration_variable(*u, var)) { return nullptr; }
-            auto d_ptr = u->differentiate(var);
+            auto d_ptr = detail::make_expression_ptr(detail::differentiate_node(detail::node(*u), var, transform_budget));
             if (!d_ptr) { return nullptr; }
-            auto du = d_ptr->simplify();
+            auto du = detail::make_expression_ptr(detail::normalize_node(detail::node(d_ptr), transform_budget));
             if (du->is_zero()) { return nullptr; }
 
             auto f_u = candidate_term;
             auto term_times_du = SymbolicExpr::multiply(detail::make_expression_ptr(f_u), detail::make_expression_ptr(*du));
-            auto ratio = SymbolicExpr::divide(detail::make_expression_ptr(expr), term_times_du)->simplify();
-            bool ratio_independent = !depends_on_integration_variable(*ratio, var);
-            if (!ratio_independent && computation.assumptions()) {
-                auto nonzero =
-                    computation.assumptions()->is_nonzero(*du);
-                if (!nonzero) {
-                    return Result<std::shared_ptr<SymbolicExpr>>::failure(
-                        nonzero.error());
-                }
-                if (nonzero.value() == Tribool::True) {
-                    ratio_independent = !depends_on_integration_variable(*ratio, var);
-                }
-            }
-    if (!ratio_independent) { return nullptr; }
-    auto primitive = substitution_primitive(candidate_term, *u);
-    if (!primitive) { return nullptr; }
-    return SymbolicExpr::multiply(ratio, primitive);
+            auto ratio = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(detail::make_expression_ptr(expr), term_times_du)), transform_budget));
+    if (depends_on_integration_variable(*ratio, var)) { return nullptr; }
+    auto primitive = substitution_primitive(candidate_term, *u, var, computation);
+    if (!primitive) { return primitive; }
+    if (!primitive.value()) { return nullptr; }
+    return SymbolicExpr::multiply(ratio, primitive.value());
+} catch (const CasError& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, "allocation failed", "substitute_candidate");
+} catch (const std::length_error& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::ResourceLimit, error.what(), "substitute_candidate");
+} catch (const std::exception& error) {
+    return Result<std::shared_ptr<SymbolicExpr>>::failure(CasErrc::InternalInvariant, error.what(), "substitute_candidate");
 }
 }
 
-Result<std::shared_ptr<SymbolicExpr>> SubstitutionStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator&,
+Result<std::optional<detail::IntegralParts>> Integrator::try_substitution(
+    const SymbolicExpr& expr, const std::string& var,
     ComputationContext& computation, int) {
     std::vector<std::shared_ptr<const SymbolicNode>> ops;
     if (auto mul = std::dynamic_pointer_cast<const MultiplyNode>(LMCAS::detail::node(expr))) {
@@ -81,9 +87,14 @@ Result<std::shared_ptr<SymbolicExpr>> SubstitutionStrategy::try_integrate_raw(
     for (const auto& operand : ops) {
         auto candidate = detail::expression_from_node(operand);
         auto result = substitute_candidate(expr, candidate, var, computation);
-        if (!result || result.value()) { return result; }
+        if (!result) {
+            return Result<std::optional<detail::IntegralParts>>::failure(result.error());
+        }
+        if (result.value()) {
+            return std::optional<detail::IntegralParts>{{*result.value(), zero_}};
+        }
     }
-    return nullptr;
+    return std::optional<detail::IntegralParts>{};
 }
 
 namespace {
@@ -129,13 +140,13 @@ LinearWrapper classify_linear_wrapper(const SymbolicExpr& expr, const std::strin
     return wrapper;
 }
 
-std::shared_ptr<SymbolicExpr> linear_dummy_expression(
-    const LinearWrapper& wrapper, const std::shared_ptr<SymbolicExpr>& dummy_var) {
+std::shared_ptr<SymbolicExpr> linear_reduced_expression(
+    const LinearWrapper& wrapper, const std::shared_ptr<SymbolicExpr>& variable) {
     if (wrapper.kind == LinearWrapperKind::PowerOfLinear) {
         return detail::make_expression_ptr(detail::make_node<PowerNode>(
-            detail::node(dummy_var), wrapper.power->exponent()));
+            detail::node(variable), wrapper.power->exponent()));
     }
-    std::vector<std::shared_ptr<const SymbolicNode>> args{detail::node(dummy_var)};
+    std::vector<std::shared_ptr<const SymbolicNode>> args{detail::node(variable)};
     auto function = detail::make_node<FunctionNode>(wrapper.function->type(), args);
     if (wrapper.kind == LinearWrapperKind::Function) {
         return detail::make_expression_ptr(function);
@@ -145,87 +156,84 @@ std::shared_ptr<SymbolicExpr> linear_dummy_expression(
 }
 }
 
-Result<bool> LinearSubstitutionStrategy::extract_linear_arg(
-    const SymbolicExpr& arg,
-    const std::string& var,
-    std::shared_ptr<SymbolicExpr>& a_out,
-    std::shared_ptr<SymbolicExpr>& b_out) {
-    if (!expression_depends_on_variable(LMCAS::detail::node(arg), var)) { return false; }
 
-    auto converted = symbolic_to_poly<SymbolicPolyCoeff>(detail::make_expression_ptr(arg), var);
-    if (!converted) {
-        if (converted.error().code == CasErrc::UnsupportedExpression) { return false; }
-        return Result<bool>::failure(converted.error());
-    }
-    auto poly = std::move(converted.value());
-    if (poly.degree() != 1) { return false; }
-    if (poly.coeffs.size() < 2) { return false; }
-
-    auto a_expr = poly.coeffs[1].val;
-    auto b_expr = poly.coeffs[0].val;
-    if (!a_expr || !b_expr) { return false; }
-    if (expression_depends_on_variable(LMCAS::detail::node(a_expr), var)) { return false; }
-    if (expression_depends_on_variable(LMCAS::detail::node(b_expr), var)) { return false; }
-
-    auto a_simp = a_expr->simplify();
-    auto b_simp = b_expr->simplify();
-    if (!a_simp) a_simp = a_expr;
-    if (!b_simp) b_simp = b_expr;
-    if (a_simp->is_zero()) { return false; }
-
-    a_out = a_simp;
-    b_out = b_simp;
-    return true;
-}
-
-Result<std::shared_ptr<SymbolicExpr>> LinearSubstitutionStrategy::try_integrate_raw(
-    const SymbolicExpr& expr, const std::string& var, Integrator& ctx,
-    ComputationContext& computation, int depth) {
+Result<std::optional<detail::IntegralParts>> Integrator::try_linear_substitution(
+    const SymbolicExpr& expr, const std::string& var,
+    ComputationContext& computation, int) {
+    detail::RewriteBudget budget(computation, computation.limits().max_recursion_depth,
+                                 computation.limits().max_ast_nodes, "integrate.linear_substitution");
     auto wrapper = classify_linear_wrapper(expr, var);
-    auto& arg_expr = wrapper.argument;
-    std::shared_ptr<SymbolicExpr> a_coeff, b_coeff;
-    if (!arg_expr) { return nullptr; }
-    auto extracted = extract_linear_arg(*arg_expr, var, a_coeff, b_coeff);
-    if (!extracted) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(extracted.error());
+    if (!wrapper.argument) { return std::optional<detail::IntegralParts>{}; }
+    auto affine = detail::recognize_affine(*wrapper.argument, var, computation);
+    if (!affine) {
+        return Result<std::optional<detail::IntegralParts>>::failure(affine.error());
     }
-    if (!extracted.value()) { return nullptr; }
-
-    /**
-     * @brief arg == var（a = 1，b = 0）由前序 TableLookup 或 PowerRule 处理。
-     * 此处返回 nullptr，将控制权交给下一策略。
-     */
-    bool a_is_one  = a_coeff && a_coeff->is_one();
-    bool b_is_zero = b_coeff && b_coeff->is_zero();
-    if (a_is_one && b_is_zero) { return nullptr; }
-
-    const std::string dummy_name = "__lin_sub_u__";
-    auto dummy_var = SymbolicExpr::variable(dummy_name);
-    auto test_expr = linear_dummy_expression(wrapper, dummy_var);
-    if (!test_expr) { return nullptr; }
-
-    TableLookupStrategy table_only;
-    auto table_attempt = table_only.try_integrate(
-        *test_expr, dummy_name, ctx, computation, depth);
-    if (!table_attempt) {
-        return Result<std::shared_ptr<SymbolicExpr>>::failure(
-            table_attempt.error());
+    if (!affine.value()) { return std::optional<detail::IntegralParts>{}; }
+    auto slope = detail::make_expression_ptr(detail::normalize_node(
+        detail::node(affine.value()->slope), budget));
+    auto offset = detail::make_expression_ptr(detail::normalize_node(
+        detail::node(affine.value()->offset), budget));
+    if (slope->is_one() && offset->is_zero()) {
+        return std::optional<detail::IntegralParts>{};
     }
-    auto* table_candidate =
-        std::get_if<IntegrationCandidate>(&table_attempt.value());
-    if (!table_candidate || !table_candidate->expression) { return nullptr; }
-    auto F_substituted = table_candidate->expression->substitute(
-        dummy_name, detail::make_expression_ptr(*arg_expr));
-    if (!F_substituted) { return nullptr; }
-
-    auto inv_a = SymbolicExpr::power(a_coeff, SymbolicExpr::number(-1));
-    auto result = SymbolicExpr::multiply(inv_a, F_substituted);
-
-    auto simplified = result->simplify();
-    if (simplified && !contains_unevaluated_integral(LMCAS::detail::node(simplified))) {
-        return simplified;
+    std::optional<detail::AssumptionFacts> facts;
+    if (computation.assumptions()) { facts.emplace(*computation.assumptions()); }
+    auto nonzero = detail::query_nonzero_value(detail::node(slope),
+        facts ? static_cast<const FactsQuery&>(*facts) : detail::no_facts(), Domain::Real, computation);
+    if (!nonzero) {
+        return Result<std::optional<detail::IntegralParts>>::failure(nonzero.error());
     }
-    return result;
+    if (nonzero.value() != Tribool::True) { return std::optional<detail::IntegralParts>{}; }
+    if (wrapper.kind == LinearWrapperKind::Function &&
+        wrapper.function->type() == FunctionNode::FuncType::Abs) {
+        auto real = detail::query_real_value(detail::node(*wrapper.argument),
+            facts ? static_cast<const FactsQuery&>(*facts) : detail::no_facts(), computation);
+        if (!real) {
+            return Result<std::optional<detail::IntegralParts>>::failure(real.error());
+        }
+        if (real.value() != Tribool::True) { return std::optional<detail::IntegralParts>{}; }
+        auto primitive = SymbolicExpr::divide(SymbolicExpr::multiply(
+            detail::make_expression_ptr(*wrapper.argument), detail::make_expression_ptr(expr)),
+            SymbolicExpr::multiply(SymbolicExpr::number(2), slope));
+        return std::optional<detail::IntegralParts>{{detail::expression_from_node(
+            detail::normalize_node(detail::node(primitive), budget)), zero_}};
+    }
+
+    auto variable = SymbolicExpr::variable(var);
+    auto test = linear_reduced_expression(wrapper, variable);
+    std::shared_ptr<SymbolicExpr> primitive;
+    if (wrapper.kind == LinearWrapperKind::PowerOfLinear) {
+        auto power = detail::integrate_power_primitive(*variable,
+            detail::expression_from_node(wrapper.power->exponent()), var, computation);
+        if (!power) {
+            return Result<std::optional<detail::IntegralParts>>::failure(power.error());
+        }
+        if (power.value()) { primitive = detail::make_expression_ptr(*power.value()); }
+    } else {
+        const auto& query = facts ? static_cast<const FactsQuery&>(*facts) : detail::no_facts();
+        auto real_variable = detail::query_real_value(detail::node(variable), query, computation);
+        if (!real_variable) {
+            return Result<std::optional<detail::IntegralParts>>::failure(real_variable.error());
+        }
+        if (real_variable.value() == Tribool::True) {
+            auto real_argument = detail::query_real_value(
+                detail::node(*wrapper.argument), query, computation);
+            if (!real_argument) {
+                return Result<std::optional<detail::IntegralParts>>::failure(real_argument.error());
+            }
+            if (real_argument.value() != Tribool::True) {
+                return std::optional<detail::IntegralParts>{};
+            }
+        }
+        primitive = lookup_integral(entries_, *test, var, budget,
+            [](std::shared_ptr<SymbolicExpr> candidate) { return candidate; });
+    }
+    if (!primitive) { return std::optional<detail::IntegralParts>{}; }
+    auto substituted = detail::make_expression_ptr(detail::substitute_node(
+        detail::node(primitive), var, detail::node(*wrapper.argument), budget));
+    auto result = detail::expression_from_node(detail::normalize_node(detail::node(
+        SymbolicExpr::divide(substituted, slope)), budget));
+    return std::optional<detail::IntegralParts>{{std::move(result), zero_}};
 }
 
 }

@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "polynomial.hpp"
 #include "bigint.hpp"
 #include "poly_utils.hpp"
@@ -70,12 +71,10 @@ static void test_non_linear_and_rational_gcd(
         SymbolicExpr::power(x, SymbolicExpr::number(2)),
         SymbolicExpr::add(SymbolicExpr::multiply(x, y),
                           SymbolicExpr::power(y, SymbolicExpr::number(2))));
-    auto harder_lhs = SymbolicExpr::multiply(
-                          quadratic_common, SymbolicExpr::add(x, SymbolicExpr::number(2)))
-                          ->expand();
-    auto harder_rhs = SymbolicExpr::multiply(
-                          quadratic_common, SymbolicExpr::add(y, SymbolicExpr::number(3)))
-                          ->expand();
+    auto harder_lhs = LMCAS::expand(SymbolicExpr::multiply(
+                          quadratic_common, SymbolicExpr::add(x, SymbolicExpr::number(2)))).value();
+    auto harder_rhs = LMCAS::expand(SymbolicExpr::multiply(
+                          quadratic_common, SymbolicExpr::add(y, SymbolicExpr::number(3)))).value();
     ComputationContext harder_context;
     auto harder_result = symbolic_polynomial_gcd(
         *harder_lhs, *harder_rhs, harder_context);
@@ -102,12 +101,10 @@ TEST(PolynomialGcd, SymbolicPolynomialGcd) {
     auto y = SymbolicExpr::variable("y");
     auto one = SymbolicExpr::number(1);
     auto common = SymbolicExpr::add(x, y);
-    auto lhs = SymbolicExpr::multiply(
-                   common, SymbolicExpr::add(x, one))
-                   ->expand();
-    auto rhs = SymbolicExpr::multiply(
-                   common, SymbolicExpr::add(y, one))
-                   ->expand();
+    auto lhs = LMCAS::expand(SymbolicExpr::multiply(
+                   common, SymbolicExpr::add(x, one))).value();
+    auto rhs = LMCAS::expand(SymbolicExpr::multiply(
+                   common, SymbolicExpr::add(y, one))).value();
 
     ComputationContext context;
     auto result = symbolic_polynomial_gcd(*lhs, *rhs, context);
@@ -129,10 +126,8 @@ TEST(PolynomialGcd, SymbolicPolynomialGcd) {
     ComputationContext approximate_context;
     auto approximate_result = symbolic_polynomial_gcd(
         *approximate, *lhs, approximate_context);
-    ASSERT_FALSE(approximate_result);
-    EXPECT_EQ(
-        approximate_result.error().code,
-        CasErrc::UnsupportedExpression);
+    ASSERT_TRUE(approximate_result) << approximate_result.error().message;
+    EXPECT_TRUE(test_proved_equivalent(approximate_result.value(), one));
 
     ResourceLimits limits;
     limits.max_steps = 0;

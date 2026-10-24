@@ -24,7 +24,7 @@ class AssumptionContext;
  * use checked, context-aware entry points when processing untrusted input.
  */
 struct ResourceLimits {
-    std::size_t max_ast_nodes = 1'000'000;       ///< Cumulative reserved nodes.
+    std::size_t max_ast_nodes = 1'000'000;       ///< Reference-expanded nodes per AST or output forest.
     std::size_t max_steps = 10'000'000;          ///< Cumulative checked steps.
     std::size_t max_recursion_depth = 256;       ///< Simultaneous checked depth.
     std::size_t max_integer_bits = 1'000'000;    ///< One checked integer result.
@@ -137,16 +137,14 @@ public:
         if (recursion_depth_ > 0) --recursion_depth_;
     }
 
-    Result<void> reserve_nodes(std::size_t amount,
-                               const std::string& operation = {}) {
+    Result<void> require_ast_nodes(std::size_t amount,
+                                   const std::string& operation = {}) const {
         auto access = check_access(operation);
         if (!access) return access;
-        if (nodes_created_ > limits_.max_ast_nodes ||
-            amount > limits_.max_ast_nodes - nodes_created_) {
+        if (amount > limits_.max_ast_nodes) {
             return Result<void>::failure(CasErrc::ResourceLimit,
                                          "AST node budget exhausted", operation);
         }
-        nodes_created_ += amount;
         return Result<void>::success();
     }
 
@@ -194,7 +192,6 @@ public:
 
     const ResourceLimits& limits() const noexcept { return limits_; }
     std::size_t steps_used() const noexcept { return steps_used_; }
-    std::size_t nodes_created() const noexcept { return nodes_created_; }
     std::size_t recursion_depth() const noexcept { return recursion_depth_; }
     const std::vector<Diagnostic>& diagnostics() const noexcept {
         return diagnostic_engine_.diagnostics();
@@ -246,7 +243,6 @@ private:
     const std::thread::id owner_thread_;
     std::shared_ptr<const AssumptionContext> assumptions_;
     std::size_t steps_used_ = 0;
-    std::size_t nodes_created_ = 0;
     std::size_t recursion_depth_ = 0;
     DiagnosticEngine diagnostic_engine_;
     UnitSystem units_;

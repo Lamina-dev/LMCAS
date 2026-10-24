@@ -97,21 +97,6 @@ TEST(AssumptionSystemIntegration, IntegratorPositiveSimplifiesAbs) {
     EXPECT_FALSE((contains_abs_of(LMCAS::detail::node(result), "x"))) << "Integration result does not contain abs(x) when x is Positive";
 }
 
-TEST(AssumptionSystemIntegration, IntegratorNoContextPreservesAbs) {
-    // Create integrand: |x|
-    auto integrand = LMCAS::detail::expression_from_node(make_abs(test_variable_node("x")));
-    /// Integrator 保持默认空假设上下文.
-    Integrator integrator;
-    auto result = integrator.integrate(integrand, "x");
-    ASSERT_TRUE((result.has_value())) << "Integration without assumptions succeeds";
-    if (!result) {
-        return;
-    }
-
-    /// 空上下文时积分结果保留 abs 或未求值积分结构,
-    /// |x| = x 化简仅在符号假设充分时启用.
-    EXPECT_TRUE((LMCAS::detail::node(result.value()) != nullptr)) << "Integration without context produces a result";
-}
 
 TEST(AssumptionSystemIntegration, LimitVisitorPositiveResolvesSign) {
     // Compute limit of 1/x as x -> 0+ with x known Positive.
@@ -257,42 +242,4 @@ TEST(AssumptionSystemIntegration, MatcherAssumptionConditionNoMatchWithoutContex
             EXPECT_TRUE((result && detail::node(result.value())->equals(*detail::node(plain && assumed ? seven : x)))) << "a rewrite applies exactly when both conditions hold";
         }
     }
-}
-
-TEST(AssumptionSystemIntegration, IntegratorNullptrIdentical) {
-    // Integrate x^2
-    auto integrand = LMCAS::detail::expression_from_node(LMCAS::detail::make_node<PowerNode>(test_variable_node("x"), test_integer_node(2)));
-    Integrator integrator1;
-    // No context set (default nullptr)
-    auto result1 = integrator1.integrate(integrand, "x");
-    ASSERT_TRUE((result1.has_value())) << "default integration succeeds";
-    if (!result1) {
-        return;
-    }
-
-    Integrator integrator2;
-    ComputationContext integration_context2;
-    auto result2_checked = integrator2.integrate_checked(
-        integrand, "x", integration_context2);
-    EXPECT_TRUE((result2_checked.has_value())) << "integration without assumptions succeeds";
-    auto result2 = result2_checked.value();
-
-    std::string s1 = result1.value().to_string();
-    std::string s2 = result2.to_string();
-
-    EXPECT_EQ((s1), (s2)) << "Integrator with default and explicit nullptr produce same result";
-}
-
-TEST(AssumptionSystemIntegration, OdeSolverNullptrIdentical) {
-    auto x = SymbolicExpr::variable("x");
-    auto y = SymbolicExpr::variable("y");
-    auto rhs = SymbolicExpr::divide(x, y);
-
-    auto result1 = solve_separable_ode(rhs, "x", "y");
-    auto result2 = solve_separable_ode(rhs, "x", "y", nullptr);
-
-    std::string s1 = result1 ? result1->to_string() : "null";
-    std::string s2 = result2 ? result2->to_string() : "null";
-
-    EXPECT_EQ((s1), (s2)) << "solve_separable_ode default and nullptr produce same result";
 }

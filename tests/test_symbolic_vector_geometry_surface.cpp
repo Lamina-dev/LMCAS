@@ -123,21 +123,15 @@ TEST(SymbolicVectorGeometrySurface, SurfaceSingularTangent) {
 
 TEST(SymbolicVectorGeometrySurface, SurfaceUnsupportedDerivative) {
     auto x = SymbolicExpr::variable("x");
-    auto y = SymbolicExpr::variable("y");
-    auto z = SymbolicExpr::variable("z");
     auto zero = SymbolicExpr::number(0);
 
-    auto singular_F = SymbolicExpr::add(
-        SymbolicExpr::add(SymbolicExpr::multiply(x, x), SymbolicExpr::multiply(y, y)),
-        SymbolicExpr::multiply(z, z));
-    SurfaceSymbolic singular{singular_F, {"x", "y", "z"}};
     std::vector<std::shared_ptr<SymbolicExpr>> origin = {zero, zero, zero};
 
     auto unsupported_F = SymbolicExpr::eq(x, zero);
     SurfaceSymbolic unsupported{unsupported_F, {"x", "y", "z"}};
     auto unsupported_normal = LMCAS::surface_normal_checked(unsupported, origin);
-    EXPECT_TRUE((!unsupported_normal.has_value())) << "checked surface normal rejects unsupported derivatives";
-    EXPECT_TRUE((unsupported_normal.error().code == LMCAS::CasErrc::Inconclusive)) << "checked surface normal reports Inconclusive for unsupported derivatives";
+    ASSERT_FALSE(unsupported_normal);
+    EXPECT_EQ(unsupported_normal.error().code, LMCAS::CasErrc::UnsupportedExpression);
 }
 
 TEST(SymbolicVectorGeometrySurface, SurfaceTangentCancellation) {

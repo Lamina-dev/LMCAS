@@ -4,6 +4,7 @@
 namespace LMCAS {
 
 void ExpandVisitor::visit(const PowerNode& node) {
+    auto& context = rewrite_budget()->context();
     std::size_t size = 1;
     auto expanded_base = expand_child(node.base(), size);
     auto expanded_exponent = expand_child(node.exponent(), size);
@@ -11,14 +12,14 @@ void ExpandVisitor::visit(const PowerNode& node) {
     BigInt exponent;
     if (try_get_integer_value(number, exponent)) {
         if (exponent.is_zero() &&
-            normalization_can_discard(expanded_base, detail::no_facts(), Domain::Real, context_) &&
-            normalization_proved(detail::query_nonzero_value(expanded_base, detail::no_facts(), Domain::Complex, context_))) {
+            normalization_can_discard(expanded_base, detail::no_facts(), Domain::Real, context) &&
+            normalization_proved(detail::query_nonzero_value(expanded_base, detail::no_facts(), Domain::Complex, context))) {
             set_result(detail::make_node<NumberNode>(BigInt(1)), 1);
             return;
         }
         const auto count = exponent.try_to_uint64();
         if (count && *count > 0 && *count < 20) {
-            NormalizationVisitor normalizer(context_, detail::no_facts(), Domain::Real, rewrite_budget());
+            NormalizationVisitor normalizer(*rewrite_budget(), detail::no_facts(), Domain::Real);
             set_result(expanded_base);
             for (std::uint64_t i = 1; i < *count; ++i) {
                 set_result(normalizer.expand_product(result, expanded_base));

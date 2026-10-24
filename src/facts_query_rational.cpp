@@ -5,7 +5,6 @@
 #include "internal/symbolic_ast.hpp"
 
 #include <algorithm>
-#include <cmath>
 
 namespace LMCAS::detail {
 using Node = std::shared_ptr<const SymbolicNode>;
@@ -51,8 +50,6 @@ std::optional<Rational> closed_rational_value(
         ~Leave() { context.leave_recursion(); }
     } leave{context};
     if (const auto* number = dynamic_cast<const NumberNode*>(node.get())) {
-        if (const auto* value = std::get_if<double>(&number->value());
-            value && !std::isfinite(*value)) { return std::nullopt; }
         auto value = exact_number_as_rational(*number);
         arithmetic.bits(std::max(value.get_numerator().bit_length(),
                                  value.get_denominator().bit_length()));

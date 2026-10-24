@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #pragma once
 
 #include "symbolic.hpp"
@@ -16,9 +17,6 @@ inline bool test_is_minus_one_number(const std::shared_ptr<const SymbolicNode> &
     }
     if (std::holds_alternative<Rational>(num->value())) {
         return std::get<Rational>(num->value()) == Rational(-1);
-    }
-    if (std::holds_alternative<lmmc_real_t>(num->value())) {
-        return std::get<lmmc_real_t>(num->value()) == -1.0;
     }
     return false;
 }
@@ -119,17 +117,17 @@ inline std::shared_ptr<SymbolicExpr> test_simplified_zero(
     if (!expression) {
         return nullptr;
     }
-    auto simplified = expression->simplify();
+    auto simplified = LMCAS::simplify(expression).value();
     return simplified && simplified->is_zero() ? simplified : nullptr;
 }
 
 inline std::shared_ptr<SymbolicExpr> test_expanded_zero(
     const std::shared_ptr<SymbolicExpr> &expression) {
-    auto expanded = expression->expand();
+    auto expanded = LMCAS::expand(expression).value();
     if (!expanded) {
         return nullptr;
     }
-    auto simplified = expanded->simplify();
+    auto simplified = LMCAS::simplify(expanded).value();
     if (simplified && simplified->is_zero()) {
         return simplified;
     }
@@ -154,7 +152,7 @@ inline std::shared_ptr<SymbolicExpr> test_normalized_delta(
         return nullptr;
     }
 
-    auto simplified = delta->simplify();
+    auto simplified = LMCAS::simplify(delta).value();
     if (simplified && simplified->is_zero()) {
         return simplified;
     }

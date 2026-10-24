@@ -26,10 +26,17 @@ TEST(ComputationContextTest, CountersRejectOverflow) {
     ASSERT_FALSE(step_overflow);
     EXPECT_EQ(step_overflow.error().code, CasErrc::ResourceLimit);
 
-    ASSERT_TRUE(context.reserve_nodes(limits.max_ast_nodes, "test.nodes"));
-    auto node_overflow = context.reserve_nodes(1, "test.nodes");
-    ASSERT_FALSE(node_overflow);
-    EXPECT_EQ(node_overflow.error().code, CasErrc::ResourceLimit);
+}
+
+TEST(ComputationContextTest, AstSizeChecksArePerCandidate) {
+    ResourceLimits limits;
+    limits.max_ast_nodes = 3;
+    ComputationContext context(limits);
+    ASSERT_TRUE(context.require_ast_nodes(3, "test.nodes"));
+    ASSERT_TRUE(context.require_ast_nodes(3, "test.nodes"));
+    auto oversized = context.require_ast_nodes(4, "test.nodes");
+    ASSERT_FALSE(oversized);
+    EXPECT_EQ(oversized.error().code, CasErrc::ResourceLimit);
 }
 
 TEST(ComputationContextTest, CancellationAppliesToBudgetOperations) {
@@ -37,7 +44,7 @@ TEST(ComputationContextTest, CancellationAppliesToBudgetOperations) {
     cancellation.cancel();
     ComputationContext context({}, cancellation);
 
-    auto nodes = context.reserve_nodes(0, "test.cancel");
+    auto nodes = context.require_ast_nodes(0, "test.cancel");
     ASSERT_FALSE(nodes);
     EXPECT_EQ(nodes.error().code, CasErrc::Cancelled);
 

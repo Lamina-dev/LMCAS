@@ -304,11 +304,12 @@ def generate_code(exprs: List[str]):
         '#include <iostream>',
         '#include <memory>',
         '#include <vector>',
-        '#include "../include/symbolic.hpp"',
+        '#include "expr.hpp"',
         '',
         'int main() {',
         '    // Setup aliases',
         '    using Expr = std::shared_ptr<LMCAS::SymbolicExpr>;',
+        '    LMCAS::ComputationContext context;',
         ''
     ]
 
@@ -329,11 +330,13 @@ def generate_code(exprs: List[str]):
              lines.append(f'    std::cout << "Expr {idx}: " << {var_name}->to_string() << std::endl;')
              
              if 'x' in all_vars:
-                 lines.append(f'    auto diff{idx} = {var_name}->differentiate("x");')
-                 lines.append(f'    std::cout << "  Diff(x): " << (diff{idx} ? diff{idx}->to_string() : "null") << std::endl;')
+                 lines.append(f'    auto diff{idx} = LMCAS::differentiate({var_name}, "x", context);')
+                 lines.append(f'    if (!diff{idx}) {{ std::cerr << diff{idx}.error().message << std::endl; return 1; }}')
+                 lines.append(f'    std::cout << "  Diff(x): " << diff{idx}.value()->to_string() << std::endl;')
              
-             lines.append(f'    auto simp{idx} = {var_name}->simplify();')
-             lines.append(f'    std::cout << "  Simp:    " << (simp{idx} ? simp{idx}->to_string() : "null") << std::endl;')
+             lines.append(f'    auto simp{idx} = LMCAS::simplify({var_name}, context);')
+             lines.append(f'    if (!simp{idx}) {{ std::cerr << simp{idx}.error().message << std::endl; return 1; }}')
+             lines.append(f'    std::cout << "  Simp:    " << simp{idx}.value()->to_string() << std::endl;')
              lines.append(f'    std::cout << "----------------------------------------" << std::endl;')
              lines.append('')
 

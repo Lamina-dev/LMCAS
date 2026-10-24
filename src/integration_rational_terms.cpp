@@ -3,6 +3,12 @@
 namespace LMCAS {
 
 namespace {
+std::shared_ptr<SymbolicExpr> rd_var_minus(const std::string& var, const Rational& r) {
+    auto v = SymbolicExpr::variable(var);
+    if (r == Rational(0)) { return v; }
+    return SymbolicExpr::add(v, SymbolicExpr::number(Rational(0) - r));
+}
+
 std::shared_ptr<SymbolicExpr> rd_integrate_linear_term(
     const Polynomial<Rational>& numerator, const Polynomial<Rational>& factor,
     int power, const std::string& var) {
@@ -22,20 +28,17 @@ std::shared_ptr<SymbolicExpr> rd_integrate_linear_term(
         return SymbolicExpr::multiply(SymbolicExpr::number(coeff), inv_pw);
 }
 
-std::shared_ptr<SymbolicExpr> rd_unevaluated_quadratic_term(
+std::shared_ptr<SymbolicExpr> rd_fraction_term(
     const Polynomial<Rational>& numerator,
     const Polynomial<Rational>& factor,
-    int power, const std::string& var) {
+    int power) {
     auto numerator_expr = poly_to_symbolic(numerator);
     auto denominator = poly_to_symbolic(factor);
     auto denominator_power = SymbolicExpr::power(
         denominator, SymbolicExpr::number(BigInt(power)));
     auto inverse = SymbolicExpr::power(
         denominator_power, SymbolicExpr::number(BigInt(-1)));
-    auto integrand = SymbolicExpr::multiply(numerator_expr, inverse);
-    return LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<IntegralNode>(
-            LMCAS::detail::node(integrand), var));
+    return SymbolicExpr::multiply(numerator_expr, inverse);
 }
 
 std::shared_ptr<SymbolicExpr> rd_integrate_repeated_quadratic(
@@ -120,12 +123,7 @@ std::shared_ptr<SymbolicExpr> rd_integrate_positive_discriminant(
 
 std::shared_ptr<SymbolicExpr> rd_integrate_quadratic_term(
     const Polynomial<Rational>& numerator, const Polynomial<Rational>& factor,
-    int power, const std::string& var) {
-    if (power >= 2) {
-        return rd_unevaluated_quadratic_term(
-            numerator, factor, power, var);
-    }
-
+    const std::string& var) {
     const Rational q = factor.coeffs.empty()
         ? Rational(0) : factor.coeffs[0];
     const Rational p = factor.coeffs.size() > 1
@@ -157,16 +155,19 @@ std::shared_ptr<SymbolicExpr> rd_integrate_quadratic_term(
 }
 
 
-std::shared_ptr<SymbolicExpr> RationalDecompositionStrategy::integrate_term(
+detail::IntegralParts detail::integrate_rational_term(
     const Polynomial<Rational>& numerator,
     const Polynomial<Rational>& factor,
     int power, const std::string& var) {
-
-    if (numerator.is_zero()) { return SymbolicExpr::number(0); }
-
-    if (factor.degree() == 1) { return rd_integrate_linear_term(numerator, factor, power, var); }
-    if (factor.degree() == 2) { return rd_integrate_quadratic_term(numerator, factor, power, var); }
-    return SymbolicExpr::number(0);
+    const SymbolicExpr zero = *SymbolicExpr::number(0);
+    if (numerator.is_zero()) { return {zero, zero}; }
+    if (factor.degree() == 1) {
+        return {*rd_integrate_linear_term(numerator, factor, power, var), zero};
+    }
+    if (factor.degree() == 2 && power == 1) {
+        return {*rd_integrate_quadratic_term(numerator, factor, var), zero};
+    }
+    return {zero, *rd_fraction_term(numerator, factor, power)};
 }
 
 }

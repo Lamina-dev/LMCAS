@@ -1,33 +1,16 @@
-#include "assumption_context.hpp"
-#include "integration.hpp"
+#include "internal/expression_transform.hpp"
 #include "internal/symbolic_ast.hpp"
-#include "internal/visitors/limit_visitor.hpp"
 
 namespace LMCAS {
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::integral(
-    std::shared_ptr<SymbolicExpr> operand,
-    const std::string& variable_name) {
-    return operand ? operand->integrate(variable_name) : nullptr;
-}
-
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::integrate(
-    const std::string& variable) const {
-    if (!impl_->root) return nullptr;
-
-    LMCAS::Integrator integrator;
-    auto integrated = integrator.integrate(*this, variable);
-    if (!integrated) return nullptr;
-    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
-    return result->simplify();
-}
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     const std::string& variable,
     const std::shared_ptr<SymbolicExpr>& point,
     int order,
     const LMCAS::AssumptionContext*) const {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!impl_->root || !point) return nullptr;
     if (order < 0) return nullptr;
 
@@ -40,14 +23,14 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
 
     for (int n = 0;; ++n) {
         if (n > 0) {
-            derivative = derivative->differentiate(variable);
+            derivative = detail::make_expression_ptr(detail::differentiate_node(detail::node(derivative), variable, transform_budget));
             if (!derivative) return nullptr;
-            derivative = derivative->simplify();
+            derivative = detail::make_expression_ptr(detail::normalize_node(detail::node(derivative), transform_budget));
         }
 
-        auto coefficient = derivative->substitute(variable, point);
+        auto coefficient = detail::make_expression_ptr(detail::substitute_node(detail::node(derivative), variable, detail::node(point), transform_budget));
         if (!coefficient) return nullptr;
-        coefficient = coefficient->simplify();
+        coefficient = detail::make_expression_ptr(detail::normalize_node(detail::node(coefficient), transform_budget));
 
         auto term = coefficient;
         if (n > 0) {
@@ -66,17 +49,7 @@ std::shared_ptr<SymbolicExpr> SymbolicExpr::series(
     }
 
     if (terms.empty()) return SymbolicExpr::number(0);
-    return LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<AddNode>(terms))->simplify();
-}
-
-std::shared_ptr<SymbolicExpr> SymbolicExpr::make_integral(
-    const std::shared_ptr<SymbolicExpr>& expression,
-    const std::string& variable) {
-    if (!expression) return nullptr;
-    return LMCAS::detail::make_expression_ptr(
-        LMCAS::detail::make_node<IntegralNode>(
-            LMCAS::detail::node(expression), variable));
+    return detail::make_expression_ptr(detail::normalize_node(LMCAS::detail::make_node<AddNode>(terms), transform_budget));
 }
 
 std::shared_ptr<SymbolicExpr> SymbolicExpr::make_limit(

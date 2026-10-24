@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 /**
  * @file ode_linear.cpp
  * @brief 常系数高阶与 Euler ODE 的解表达式构造和受检 API。
@@ -22,11 +24,11 @@ namespace LMCAS {
 static Result<ODESolution> solve_higher_order_ode_impl(
     const std::vector<double>&,
     const std::shared_ptr<SymbolicExpr>&,
-    const std::string&, const std::string&);
+    const std::string&, const std::string&, ComputationContext& context);
 static Result<ODESolution> solve_euler_ode_impl(
     const std::vector<double>&,
     const std::shared_ptr<SymbolicExpr>&,
-    const std::string&, const std::string&);
+    const std::string&, const std::string&, ComputationContext& context);
 
 
 using namespace ode_root_detail;
@@ -234,7 +236,9 @@ ODESolutionResult solve_higher_order_ode_checked(
     const std::string& x,
     const std::string& y,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "solve_higher_order_ode";
     auto variables = validate_ode_variables(x, y, context, operation);
     if (!variables) {
@@ -270,16 +274,16 @@ ODESolutionResult solve_higher_order_ode_checked(
 
     try {
         auto solution_result = solve_higher_order_ode_impl(
-            coeffs, nullptr, x, y);
+            coeffs, nullptr, x, y, context);
         if (!solution_result) {
             return ODESolutionResult::failure(solution_result.error());
         }
         auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
-            auto particular = SymbolicExpr::divide(
-                forcing, SymbolicExpr::number(coeffs.back()))->simplify();
-            solution.general_solution = SymbolicExpr::add(
-                solution.general_solution, particular)->simplify();
+            auto particular = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
+                forcing, SymbolicExpr::number(coeffs.back()))), transform_budget));
+            solution.general_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
+                solution.general_solution, particular)), transform_budget));
         }
         return wrap_ode_solution(
             std::move(solution),
@@ -290,12 +294,20 @@ ODESolutionResult solve_higher_order_ode_checked(
             CasErrc::ResourceLimit,
             "allocation failed while solving higher-order ODE",
             operation);
-    } catch (const std::exception& ex) {
+    } catch (const std::length_error& error) { return ODESolutionResult::failure(CasErrc::ResourceLimit, error.what(), "solve_higher_order_ode"); } catch (const std::exception& ex) {
         return ODESolutionResult::failure(
             CasErrc::InternalInvariant,
             ex.what(),
             operation);
     }
+} catch (const CasError& error) {
+    return ODESolutionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_higher_order_ode");
+} catch (const std::length_error& error) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, error.what(), "solve_higher_order_ode");
+} catch (const std::exception& error) {
+    return ODESolutionResult::failure(CasErrc::InternalInvariant, error.what(), "solve_higher_order_ode");
 }
 
 ODESolutionResult solve_higher_order_ode_checked(
@@ -312,8 +324,11 @@ static Result<ODESolution> solve_higher_order_ode_impl(
     const std::vector<double>& coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
-    const std::string&)
-{
+    const std::string&, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "solve_higher_order_ode";
     ODESolution result;
     result.method_used = ODEType::HigherOrder_ConstCoeff;
@@ -332,9 +347,17 @@ static Result<ODESolution> solve_higher_order_ode_impl(
     result.general_solution =
         build_homogeneous_solution(roots.value(), x, result.constants);
     if (result.general_solution) {
-        result.general_solution = result.general_solution->simplify();
+        result.general_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(result.general_solution), transform_budget));
     }
     return Result<ODESolution>::success(std::move(result));
+} catch (const CasError& error) {
+    return Result<ODESolution>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<ODESolution>::failure(CasErrc::ResourceLimit, "allocation failed", "solve_higher_order_ode");
+} catch (const std::length_error& error) {
+    return Result<ODESolution>::failure(CasErrc::ResourceLimit, error.what(), "solve_higher_order_ode");
+} catch (const std::exception& error) {
+    return Result<ODESolution>::failure(CasErrc::InternalInvariant, error.what(), "solve_higher_order_ode");
 }
 
 static bool unsupported_euler_forcing(
@@ -349,7 +372,9 @@ ODESolutionResult solve_euler_ode_checked(
     const std::string& x,
     const std::string& y,
     ComputationContext& context)
-{
+try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "solve_euler_ode";
     auto variables = validate_ode_variables(x, y, context, operation);
     if (!variables) {
@@ -376,17 +401,17 @@ ODESolutionResult solve_euler_ode_checked(
 
     try {
         auto solution_result = solve_euler_ode_impl(
-            euler_coeffs, nullptr, x, y);
+            euler_coeffs, nullptr, x, y, context);
         if (!solution_result) {
             return ODESolutionResult::failure(solution_result.error());
         }
         auto solution = std::move(solution_result.value());
         if (nonzero_forcing && solution.general_solution) {
-            auto particular = SymbolicExpr::divide(
+            auto particular = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::divide(
                 forcing,
-                SymbolicExpr::number(euler_coeffs.back()))->simplify();
-            solution.general_solution = SymbolicExpr::add(
-                solution.general_solution, particular)->simplify();
+                SymbolicExpr::number(euler_coeffs.back()))), transform_budget));
+            solution.general_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(
+                solution.general_solution, particular)), transform_budget));
         }
         return wrap_ode_solution(
             std::move(solution),
@@ -397,12 +422,20 @@ ODESolutionResult solve_euler_ode_checked(
             CasErrc::ResourceLimit,
             "allocation failed while solving Euler ODE",
             operation);
-    } catch (const std::exception& ex) {
+    } catch (const std::length_error& error) { return ODESolutionResult::failure(CasErrc::ResourceLimit, error.what(), "solve_euler_ode"); } catch (const std::exception& ex) {
         return ODESolutionResult::failure(
             CasErrc::InternalInvariant,
             ex.what(),
             operation);
     }
+} catch (const CasError& error) {
+    return ODESolutionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, "allocation failed", "solve_euler_ode");
+} catch (const std::length_error& error) {
+    return ODESolutionResult::failure(CasErrc::ResourceLimit, error.what(), "solve_euler_ode");
+} catch (const std::exception& error) {
+    return ODESolutionResult::failure(CasErrc::InternalInvariant, error.what(), "solve_euler_ode");
 }
 
 ODESolutionResult solve_euler_ode_checked(
@@ -419,8 +452,11 @@ static Result<ODESolution> solve_euler_ode_impl(
     const std::vector<double>& euler_coeffs,
     const std::shared_ptr<SymbolicExpr>& forcing,
     const std::string& x,
-    const std::string&)
-{
+    const std::string&, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "solve_euler_ode";
     ODESolution result;
     result.method_used = ODEType::Euler;
@@ -454,9 +490,17 @@ static Result<ODESolution> solve_euler_ode_impl(
     result.general_solution =
         build_euler_solution(roots.value(), x, result.constants);
     if (result.general_solution) {
-        result.general_solution = result.general_solution->simplify();
+        result.general_solution = detail::make_expression_ptr(detail::normalize_node(detail::node(result.general_solution), transform_budget));
     }
     return Result<ODESolution>::success(std::move(result));
+} catch (const CasError& error) {
+    return Result<ODESolution>::failure(error);
+} catch (const std::bad_alloc&) {
+    return Result<ODESolution>::failure(CasErrc::ResourceLimit, "allocation failed", "solve_euler_ode");
+} catch (const std::length_error& error) {
+    return Result<ODESolution>::failure(CasErrc::ResourceLimit, error.what(), "solve_euler_ode");
+} catch (const std::exception& error) {
+    return Result<ODESolution>::failure(CasErrc::InternalInvariant, error.what(), "solve_euler_ode");
 }
 
 /**

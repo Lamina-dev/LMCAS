@@ -67,10 +67,6 @@ QueryTriboolResult QueryInterface::query_positive_checked(const SymbolicExpr& ex
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::Unknown;
-                    }
                     if (is_infinity_node(expr)) {
                         int sign = get_infinity_sign(expr);
                         if (sign > 0) return Tribool::True;
@@ -94,10 +90,6 @@ QueryTriboolResult QueryInterface::query_negative_checked(const SymbolicExpr& ex
             auto result = cached_query_checked(
                 expr, PropType::Negative, "query_negative_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
-                        return Tribool::Unknown;
-                    }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
                     if (is_infinity_node(expr)) {
@@ -125,10 +117,6 @@ QueryTriboolResult QueryInterface::query_nonnegative_checked(const SymbolicExpr&
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::Unknown;
-                    }
                     if (is_infinity_node(expr)) {
                         int sign = get_infinity_sign(expr);
                         if (sign > 0) return Tribool::True;
@@ -154,10 +142,6 @@ QueryTriboolResult QueryInterface::query_real_checked(const SymbolicExpr& expr) 
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::Unknown;
-                    }
                     if (is_infinity_node(expr)) {
                         return Tribool::Unknown;
                     }
@@ -180,10 +164,6 @@ QueryTriboolResult QueryInterface::query_integer_checked(const SymbolicExpr& exp
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::False;
-                    }
                     if (is_infinity_node(expr)) {
                         return Tribool::False;
                     }
@@ -204,10 +184,6 @@ QueryTriboolResult QueryInterface::query_nonzero_checked(const SymbolicExpr& exp
             auto result = cached_query_checked(
                 expr, PropType::NonZero, "query_nonzero_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
-                        return Tribool::Unknown;
-                    }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
                     if (is_infinity_node(expr)) {
@@ -234,10 +210,6 @@ QueryTriboolResult QueryInterface::query_algebraic_checked(const SymbolicExpr& e
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::Unknown;
-                    }
                     if (is_infinity_node(expr)) {
                         return Tribool::False;
                     }
@@ -258,10 +230,6 @@ QueryTriboolResult QueryInterface::query_transcendental_checked(const SymbolicEx
             auto result = cached_query_checked(
                 expr, PropType::Transcendental, "query_transcendental_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
-                        return Tribool::Unknown;
-                    }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
                     if (is_infinity_node(expr)) {
@@ -286,10 +254,6 @@ QueryTriboolResult QueryInterface::query_finite_checked(const SymbolicExpr& expr
                     if (is_unhandled_type(expr)) {
                         return Tribool::Unknown;
                     }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
-                        return Tribool::Unknown;
-                    }
                     if (is_infinity_node(expr)) {
                         return Tribool::False;
                     }
@@ -310,10 +274,6 @@ QueryTriboolResult QueryInterface::query_divergent_checked(const SymbolicExpr& e
             auto result = cached_query_checked(
                 expr, PropType::Divergent, "query_divergent_checked", [&]() -> QueryTriboolResult {
                     if (is_unhandled_type(expr)) {
-                        return Tribool::Unknown;
-                    }
-                    if (std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(expr)) &&
-                        is_nan_number(expr)) {
                         return Tribool::Unknown;
                     }
                     if (is_infinity_node(expr)) {

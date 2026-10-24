@@ -44,7 +44,7 @@ std::shared_ptr<const SymbolicNode> NormalizationVisitor::get_result() const {
 
 void NormalizationVisitor::set_result(std::shared_ptr<const SymbolicNode> candidate) {
     if (auto* budget = rewrite_budget()) {
-        budget->measure(candidate);
+        budget->measure_result(candidate);
     }
     result.swap(candidate);
 }
@@ -92,7 +92,7 @@ void NormalizationVisitor::merge_complex_terms(
     }
     auto real_sum = SymbolicFactory::create_add(real, rewrite_budget());
     auto imag_sum = SymbolicFactory::create_add(imag, rewrite_budget());
-    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
     real_sum->accept(visitor);
     auto normalized_real = visitor.get_result();
     imag_sum->accept(visitor);
@@ -136,7 +136,7 @@ std::shared_ptr<const NumberNode> NormalizationVisitor::extract_term_coefficient
         }
     }
     auto rest_product = make_normalized_multiply_node(rest, rewrite_budget());
-    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
     rest_product->accept(visitor);
     term = visitor.get_result();
     return coefficient;

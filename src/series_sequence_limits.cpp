@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "limit_result.hpp"
 #include "series_engine.hpp"
 #include "symbolic.hpp"
@@ -62,46 +64,64 @@ static bool series_extract_alternating(
 }
 
 
-static std::shared_ptr<SymbolicExpr> series_abs(const std::shared_ptr<SymbolicExpr>& expr) {
+static std::shared_ptr<SymbolicExpr> series_abs(const std::shared_ptr<SymbolicExpr>& expr, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expr) {
         return nullptr;
     }
-    return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs,
-        std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(expr)}))->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(LMCAS::detail::make_node<FunctionNode>(FunctionNode::FuncType::Abs,
+        std::vector<std::shared_ptr<const SymbolicNode>>{LMCAS::detail::node(expr)}), transform_budget));
 }
 
-static std::shared_ptr<SymbolicExpr> series_negate(const std::shared_ptr<SymbolicExpr>& expr) {
+static std::shared_ptr<SymbolicExpr> series_negate(const std::shared_ptr<SymbolicExpr>& expr, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!expr) {
         return nullptr;
     }
-    return SymbolicExpr::multiply(SymbolicExpr::number(-1), expr)->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(SymbolicExpr::number(-1), expr)), transform_budget));
 }
 
 static ExpressionResult alternating_sequence_bound(
     const std::shared_ptr<SymbolicExpr>& remainder, const std::string& n,
-    bool upper, ComputationContext& context) {
+    bool upper, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     auto limited = limit_expression_checked(
         remainder, n, SymbolicExpr::infinity(), LimitDirection::Both, context);
     if (!limited) {
         return limited;
     }
     auto limit = std::move(limited.value());
-    auto simplified = limit ? limit->simplify() : nullptr;
+    auto simplified = limit ? detail::make_expression_ptr(detail::normalize_node(detail::node(limit), transform_budget)) : nullptr;
     if (simplified && !series_is_infinity(simplified)) {
-        auto magnitude = series_abs(simplified);
-        return upper ? magnitude : series_negate(magnitude);
+        auto magnitude = series_abs(simplified, context);
+        return upper ? magnitude : series_negate(magnitude, context);
     }
     if (series_is_infinity(simplified)) {
         return upper ? SymbolicExpr::infinity() : SymbolicExpr::infinity(-1);
     }
-    auto magnitude = series_abs(limit);
-    return upper ? magnitude : series_negate(magnitude);
+    auto magnitude = series_abs(limit, context);
+    return upper ? magnitude : series_negate(magnitude, context);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "alternating_sequence_bound");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "alternating_sequence_bound");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "alternating_sequence_bound");
 }
 
 
 static ExpressionResult sequence_extreme_limit(
     const std::shared_ptr<SymbolicExpr>& a_n, const std::string& n,
-    bool upper, ComputationContext& context) {
+    bool upper, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::shared_ptr<SymbolicExpr> remainder;
     if (series_extract_alternating(detail::node(a_n), n, remainder)) {
         return alternating_sequence_bound(remainder, n, upper, context);
@@ -113,9 +133,17 @@ static ExpressionResult sequence_extreme_limit(
         return limited;
     }
     auto limit = std::move(limited.value());
-    auto simplified = limit ? limit->simplify() : nullptr;
+    auto simplified = limit ? detail::make_expression_ptr(detail::normalize_node(detail::node(limit), transform_budget)) : nullptr;
     return ExpressionResult::success(
         simplified ? std::move(simplified) : std::move(limit));
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", "sequence_extreme_limit");
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), "sequence_extreme_limit");
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), "sequence_extreme_limit");
 }
 
 ExpressionResult lim_sup_checked(

@@ -60,8 +60,7 @@ std::optional<ExprPtr> rewrite_negative_lambert_exponential(
     }
     const auto argument =
         std::dynamic_pointer_cast<const NumberNode>(lambert->arguments()[0]);
-    if (!argument || std::holds_alternative<lmmc_real_t>(argument->value()) ||
-        !argument->is_positive()) {
+    if (!argument || !argument->is_positive()) {
         return std::nullopt;
     }
     if (argument->is_one()) {

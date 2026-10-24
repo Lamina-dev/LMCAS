@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_mixed_transcendental_support.hpp"
 
 TEST(MixedTranscendentalClassification, ClassificationSinXPlusX) {
@@ -139,7 +140,7 @@ TEST(MixedTranscendentalClassification, RoutingTranscendentalSubstitutionNotHybr
         auto value = test_numeric_eval(results.front());
         ASSERT_TRUE(value.has_value());
         EXPECT_NEAR(*value, std::log(2.0), 1e-10);
-        auto residual = expr->substitute("x", results.front())->simplify();
+        auto residual = LMCAS::simplify(LMCAS::substitute(expr, "x", results.front()).value()).value();
         ASSERT_NE(residual, nullptr);
         auto residual_value = test_numeric_eval(residual);
         ASSERT_TRUE(residual_value.has_value());

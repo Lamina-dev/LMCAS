@@ -1,5 +1,7 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_ode.hpp"
+#include "symbolic_ode_engine.hpp"
 #include "numeric_evaluation.hpp"
 #include "internal/expression_analysis.hpp"
 
@@ -11,8 +13,8 @@ static void expect_separable_first_integral(
     double (*expected)(double, double)) {
     ASSERT_NE(solution, nullptr);
     auto residual = SymbolicExpr::add(
-        solution->differentiate("x"),
-        SymbolicExpr::multiply(rhs, solution->differentiate("y")));
+        LMCAS::differentiate(solution, "x").value(),
+        SymbolicExpr::multiply(rhs, LMCAS::differentiate(solution, "y").value()));
     EXPECT_TRUE(test_proved_equivalent(residual, SymbolicExpr::number(0)));
     const double points[][2] = {{1.0, 2.0}, {2.0, 3.0}, {3.0, 1.0}, {0.5, 4.0}};
     for (const auto& point : points) {
@@ -51,9 +53,9 @@ TEST(SymbolicOde, SeparableXY) {
         ASSERT_NE(sol, nullptr);
         EXPECT_TRUE(expression_depends_on_variable(LMCAS::detail::node(*sol), "y"));
         EXPECT_TRUE(expression_depends_on_variable(LMCAS::detail::node(*sol), "x"));
-        auto at_one = sol->substitute("x", SymbolicExpr::number(1));
+        auto at_one = LMCAS::substitute(sol, "x", SymbolicExpr::number(1)).value();
         ASSERT_NE(at_one, nullptr);
-        auto derivative = at_one->differentiate("y");
+        auto derivative = LMCAS::differentiate(at_one, "y").value();
         ASSERT_NE(derivative, nullptr);
         auto at_two = evaluate_numeric(*derivative, {{"y", 2.0}});
         auto at_four = evaluate_numeric(*derivative, {{"y", 4.0}});
@@ -79,9 +81,9 @@ TEST(SymbolicOde, SeparableYOverX) {
         ASSERT_NE(sol, nullptr);
         EXPECT_TRUE(expression_depends_on_variable(LMCAS::detail::node(*sol), "y"));
         EXPECT_TRUE(expression_depends_on_variable(LMCAS::detail::node(*sol), "x"));
-        auto at_one = sol->substitute("x", SymbolicExpr::number(1));
+        auto at_one = LMCAS::substitute(sol, "x", SymbolicExpr::number(1)).value();
         ASSERT_NE(at_one, nullptr);
-        auto derivative = at_one->differentiate("y");
+        auto derivative = LMCAS::differentiate(at_one, "y").value();
         ASSERT_NE(derivative, nullptr);
         auto at_two = evaluate_numeric(*derivative, {{"y", 2.0}});
         auto at_four = evaluate_numeric(*derivative, {{"y", 4.0}});
@@ -239,11 +241,9 @@ static void test_linear2_repeated_zero() {
             double initial_values[2] = {};
             double initial_slopes[2] = {};
             for (int i = 0; i < 2; ++i) {
-                auto basis = result.value()
-                                 ->substitute("C1", SymbolicExpr::number(i == 0 ? 1 : 0))
-                                 ->substitute("C2", SymbolicExpr::number(i == 1 ? 1 : 0));
-                auto derivative = basis->differentiate("x");
-                EXPECT_TRUE((derivative->differentiate("x")->simplify()->is_zero())) << "each repeated-zero-root basis solves y'' = 0 exactly";
+                auto basis = LMCAS::substitute(LMCAS::substitute(result.value(), "C1", SymbolicExpr::number(i == 0 ? 1 : 0)).value(), "C2", SymbolicExpr::number(i == 1 ? 1 : 0)).value();
+                auto derivative = LMCAS::differentiate(basis, "x").value();
+                EXPECT_TRUE((LMCAS::simplify(LMCAS::differentiate(derivative, "x").value()).value()->is_zero())) << "each repeated-zero-root basis solves y'' = 0 exactly";
                 auto value = LMCAS::evaluate_numeric(*basis, {{"x", 0.0}});
                 auto slope = LMCAS::evaluate_numeric(*derivative, {{"x", 0.0}});
                 EXPECT_TRUE((value.has_value() && slope.has_value())) << "repeated-zero-root basis has finite initial data";
@@ -271,13 +271,11 @@ static void test_linear2_coefficient_scaling() {
             bool found_minus_one = false;
             bool found_minus_two = false;
             for (const char *selected : {"C1", "C2"}) {
-                auto basis = result.value()
-                                 ->substitute("C1", SymbolicExpr::number(
-                                                        std::string(selected) == "C1" ? 1 : 0))
-                                 ->substitute("C2", SymbolicExpr::number(
-                                                        std::string(selected) == "C2" ? 1 : 0));
+                auto basis = LMCAS::substitute(LMCAS::substitute(result.value(), "C1", SymbolicExpr::number(
+                                                        std::string(selected) == "C1" ? 1 : 0)).value(), "C2", SymbolicExpr::number(
+                                                        std::string(selected) == "C2" ? 1 : 0)).value();
                 auto derivative = LMCAS::evaluate_numeric(
-                    *basis->differentiate("x"), {{"x", 0.0}});
+                    *LMCAS::differentiate(basis, "x").value(), {{"x", 0.0}});
                 if (derivative) {
                     found_minus_one |=
                         std::abs(derivative.value().value + 1.0) < 1.0e-12;
@@ -345,4 +343,30 @@ TEST(SymbolicOde, Linear2CheckedContracts) {
     test_linear2_forcing_domain();
     test_linear2_invalid_inputs();
     test_linear2_context_errors();
+}
+
+TEST(SymbolicOde, ExactIntegrationPreservesBudgetFailure) {
+    ResourceLimits limits;
+    limits.max_steps = 0;
+    ComputationContext context(limits);
+    auto result = solve_exact_ode_checked(
+        SymbolicExpr::variable("x"), SymbolicExpr::variable("y"), "x", "y", context);
+    ASSERT_FALSE(result);
+    EXPECT_EQ(result.error().code, CasErrc::ResourceLimit);
+    EXPECT_EQ(context.recursion_depth(), 0u);
+}
+
+TEST(SymbolicOde, ZeroLeadingCoefficientPreservesNumericBasis) {
+    for (double coefficient : {0.0, 1.0}) {
+        SCOPED_TRACE(coefficient);
+        ComputationContext context;
+        auto solution = solve_linear2_ode_checked(
+            0.0, 1.0, coefficient, SymbolicExpr::number(0), "x", "y", context);
+        ASSERT_TRUE(solution) << solution.error().message;
+        auto value = evaluate_numeric(
+            *solution.value(), {{"x", 1.0}, {"C", 1.0}}, context);
+        ASSERT_TRUE(value) << value.error().message;
+        ASSERT_TRUE(value.value().is_finite());
+        EXPECT_NEAR(value.value().value, std::exp(-coefficient), 1e-12);
+    }
 }

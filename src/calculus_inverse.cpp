@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "root_of_utils.hpp"
 #include "solve_strategies.hpp"
 #include "internal/calculus_utils_support.hpp"
@@ -56,19 +58,19 @@ static bool calculus_utils_is_negative_number(const std::shared_ptr<const Number
     if (std::holds_alternative<BigInt>(number->value())) {
         return std::get<BigInt>(number->value()) < BigInt(0);
     }
-    if (std::holds_alternative<Rational>(number->value())) {
-        return std::get<Rational>(number->value()) < Rational(0);
-    }
-    return std::get<lmmc_real_t>(number->value()) < 0.0;
+    return std::get<Rational>(number->value()) < Rational(0);
 }
 
-static bool is_nonreal_sqrt(const FunctionNode& function)
+static bool is_nonreal_sqrt(const FunctionNode& function, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (function.type() != FunctionNode::FuncType::Sqrt ||
         function.arguments().size() != 1) {
         return false;
     }
-    auto argument = LMCAS::detail::make_expression_ptr(function.arguments()[0])->simplify();
+    auto argument = detail::make_expression_ptr(detail::normalize_node(function.arguments()[0], transform_budget));
     auto number = argument
         ? std::dynamic_pointer_cast<const NumberNode>(LMCAS::detail::node(argument))
         : nullptr;
@@ -76,44 +78,44 @@ static bool is_nonreal_sqrt(const FunctionNode& function)
 }
 
 static bool calculus_utils_contains_nonreal_sqrt(
-    const std::shared_ptr<const SymbolicNode>& node);
+    const std::shared_ptr<const SymbolicNode>& node, ComputationContext& context);
 
 static bool any_nonreal_sqrt(
-    const std::vector<std::shared_ptr<const SymbolicNode>>& children)
+    const std::vector<std::shared_ptr<const SymbolicNode>>& children, ComputationContext& context)
 {
     for (const auto& child : children) {
-        if (calculus_utils_contains_nonreal_sqrt(child)) {
+        if (calculus_utils_contains_nonreal_sqrt(child, context)) {
             return true;
         }
     }
     return false;
 }
 
-static bool calculus_utils_contains_nonreal_sqrt(const std::shared_ptr<const SymbolicNode>& node)
+static bool calculus_utils_contains_nonreal_sqrt(const std::shared_ptr<const SymbolicNode>& node, ComputationContext& context)
 {
     if (!node) {
         return false;
     }
 
     if (auto function = std::dynamic_pointer_cast<const FunctionNode>(node)) {
-        if (is_nonreal_sqrt(*function)) {
+        if (is_nonreal_sqrt(*function, context)) {
             return true;
         }
-        return any_nonreal_sqrt(function->arguments());
+        return any_nonreal_sqrt(function->arguments(), context);
     }
     if (auto add = std::dynamic_pointer_cast<const AddNode>(node)) {
-        return any_nonreal_sqrt(add->operands());
+        return any_nonreal_sqrt(add->operands(), context);
     }
     if (auto multiply = std::dynamic_pointer_cast<const MultiplyNode>(node)) {
-        return any_nonreal_sqrt(multiply->operands());
+        return any_nonreal_sqrt(multiply->operands(), context);
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node)) {
-        return calculus_utils_contains_nonreal_sqrt(power->base()) ||
-               calculus_utils_contains_nonreal_sqrt(power->exponent());
+        return calculus_utils_contains_nonreal_sqrt(power->base(), context) ||
+               calculus_utils_contains_nonreal_sqrt(power->exponent(), context);
     }
     if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(node)) {
-        return calculus_utils_contains_nonreal_sqrt(complex->real()) ||
-               calculus_utils_contains_nonreal_sqrt(complex->imag());
+        return calculus_utils_contains_nonreal_sqrt(complex->real(), context) ||
+               calculus_utils_contains_nonreal_sqrt(complex->imag(), context);
     }
     return false;
 }
@@ -126,8 +128,11 @@ enum class CalculusRealCandidateStatus {
 
 static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
     const std::shared_ptr<SymbolicExpr>& candidate,
-    std::shared_ptr<SymbolicExpr>& real_candidate)
+    std::shared_ptr<SymbolicExpr>& real_candidate, ComputationContext& context)
 {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     real_candidate.reset();
     auto simplified_candidate = rootof_simplify(candidate);
     if (!simplified_candidate || !LMCAS::detail::node(simplified_candidate)) {
@@ -136,18 +141,18 @@ static CalculusRealCandidateStatus calculus_utils_extract_real_candidate(
     if (LMCAS::detail::contains_node_type<RootOfNode>(LMCAS::detail::node(simplified_candidate))) {
         return CalculusRealCandidateStatus::Inconclusive;
     }
-    if (calculus_utils_contains_nonreal_sqrt(LMCAS::detail::node(simplified_candidate))) {
+    if (calculus_utils_contains_nonreal_sqrt(LMCAS::detail::node(simplified_candidate), context)) {
         return CalculusRealCandidateStatus::NonReal;
     }
 
     if (auto complex = std::dynamic_pointer_cast<const ComplexNode>(
             LMCAS::detail::node(simplified_candidate))) {
-        auto imag = LMCAS::detail::make_expression_ptr(complex->imag())->simplify();
+        auto imag = detail::make_expression_ptr(detail::normalize_node(complex->imag(), transform_budget));
         if (!imag || !LMCAS::detail::node(imag)) {
             return CalculusRealCandidateStatus::Inconclusive;
         }
         if (imag->is_zero()) {
-            auto real = LMCAS::detail::make_expression_ptr(complex->real())->simplify();
+            auto real = detail::make_expression_ptr(detail::normalize_node(complex->real(), transform_budget));
             if (!real || !LMCAS::detail::node(real)) {
                 return CalculusRealCandidateStatus::Inconclusive;
             }
@@ -180,13 +185,16 @@ static bool contains_inverse_candidate(
 static SymbolicExprVectorResult verified_real_inverse_candidates(
     const std::vector<std::shared_ptr<SymbolicExpr>>& candidates,
     const std::shared_ptr<SymbolicExpr>& equation, const std::string& var,
-    const std::string& operation)
-{
+    const std::string& operation, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::vector<std::shared_ptr<SymbolicExpr>> real_candidates;
     real_candidates.reserve(candidates.size());
     for (const auto& candidate : candidates) {
         std::shared_ptr<SymbolicExpr> real_candidate;
-        auto status = calculus_utils_extract_real_candidate(candidate, real_candidate);
+        auto status = calculus_utils_extract_real_candidate(candidate, real_candidate, context);
         if (status == CalculusRealCandidateStatus::Inconclusive) {
             return SymbolicExprVectorResult::failure(
                 CasErrc::Inconclusive,
@@ -195,8 +203,8 @@ static SymbolicExprVectorResult verified_real_inverse_candidates(
         if (status == CalculusRealCandidateStatus::NonReal) {
             continue;
         }
-        auto residual = equation->substitute(var, real_candidate);
-        auto simplified = residual ? residual->simplify() : nullptr;
+        auto residual = detail::make_expression_ptr(detail::substitute_node(detail::node(equation), var, detail::node(real_candidate), transform_budget));
+        auto simplified = residual ? detail::make_expression_ptr(detail::normalize_node(detail::node(residual), transform_budget)) : nullptr;
         if (!simplified || !LMCAS::detail::node(simplified)) {
             return SymbolicExprVectorResult::failure(
                 CasErrc::InternalInvariant,
@@ -210,13 +218,24 @@ static SymbolicExprVectorResult verified_real_inverse_candidates(
         }
     }
     return SymbolicExprVectorResult::success(std::move(real_candidates));
+} catch (const CasError& error) {
+    return SymbolicExprVectorResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return SymbolicExprVectorResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return SymbolicExprVectorResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return SymbolicExprVectorResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 static ExpressionResult inverse_branch_derivative(
     const std::shared_ptr<SymbolicExpr>& f, const std::string& var,
     const std::vector<std::shared_ptr<SymbolicExpr>>& candidates,
-    const std::string& operation)
-{
+    const std::string& operation, ComputationContext& context)
+try {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
         if (candidates.empty()) {
             return ExpressionResult::failure(
                 CasErrc::DomainError,
@@ -230,7 +249,7 @@ static ExpressionResult inverse_branch_derivative(
                 operation);
         }
 
-        auto f_prime = f->differentiate(var);
+        auto f_prime = detail::make_expression_ptr(detail::differentiate_node(detail::node(f), var, transform_budget));
         if (!f_prime || !LMCAS::detail::node(f_prime)) {
             return ExpressionResult::failure(
                 CasErrc::Inconclusive,
@@ -238,8 +257,8 @@ static ExpressionResult inverse_branch_derivative(
                 operation);
         }
 
-        auto f_prime_at_x0 = f_prime->substitute(var, candidates[0]);
-        auto simplified_derivative = f_prime_at_x0 ? f_prime_at_x0->simplify() : nullptr;
+        auto f_prime_at_x0 = detail::make_expression_ptr(detail::substitute_node(detail::node(f_prime), var, detail::node(candidates[0]), transform_budget));
+        auto simplified_derivative = f_prime_at_x0 ? detail::make_expression_ptr(detail::normalize_node(detail::node(f_prime_at_x0), transform_budget)) : nullptr;
         if (!simplified_derivative || !LMCAS::detail::node(simplified_derivative)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
@@ -255,7 +274,7 @@ static ExpressionResult inverse_branch_derivative(
         }
 
         auto result = SymbolicExpr::divide(SymbolicExpr::number(1), simplified_derivative);
-        auto simplified = result ? result->simplify() : nullptr;
+        auto simplified = result ? detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget)) : nullptr;
         if (!simplified || !LMCAS::detail::node(simplified)) {
             return ExpressionResult::failure(
                 CasErrc::InternalInvariant,
@@ -263,6 +282,14 @@ static ExpressionResult inverse_branch_derivative(
                 operation);
         }
         return ExpressionResult::success(simplified);
+} catch (const CasError& error) {
+    return ExpressionResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return ExpressionResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return ExpressionResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 static SymbolicExprVectorResult explicit_inverse_candidates(
@@ -315,11 +342,11 @@ ExpressionResult inverse_derivative_checked(
         } else {
             return ExpressionResult::failure(inverse.error());
         }
-        auto verified = verified_real_inverse_candidates(candidates, eq, var, operation);
+        auto verified = verified_real_inverse_candidates(candidates, eq, var, operation, context);
         if (!verified) {
             return ExpressionResult::failure(verified.error());
         }
-        return inverse_branch_derivative(f, var, verified.value(), operation);
+        return inverse_branch_derivative(f, var, verified.value(), operation, context);
     } catch (const std::bad_alloc&) {
         return ExpressionResult::failure(CasErrc::ResourceLimit,
                                            "inverse derivative allocation failed",

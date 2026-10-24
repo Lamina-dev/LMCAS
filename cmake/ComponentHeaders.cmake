@@ -127,8 +127,6 @@ target_sources(lmcas_algebra PRIVATE
 target_sources(lmcas_calculus PRIVATE
     include/integration.hpp
     include/integrator.hpp
-    include/integration_strategies.hpp
-    include/integration_table.hpp
     include/multiple_integral.hpp
     include/numerical_integration.hpp
     include/calculus_utils.hpp

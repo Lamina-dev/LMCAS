@@ -1,14 +1,11 @@
 /** @file internal/normalization_utils.hpp */
 #pragma once
-#include "lmmc/config.h"
-#include "lmmc/numeric.h"
 #include "internal/symbolic_ast.hpp"
 #include "internal/expression_analysis.hpp"
 #include "internal/facts_query.hpp"
 #include <vector>
 #include <map>
 #include <algorithm>
-#include <cmath>
 
 namespace LMCAS {
 
@@ -100,10 +97,6 @@ struct NodeCompare {
 };
 bool normalization_factor_less(const std::shared_ptr<const SymbolicNode>& left,
                                const std::shared_ptr<const SymbolicNode>& right);
-lmmc_real_t normalization_number_value(const NumberNode& node);
-bool is_approximate_number(const NumberNode& node);
-bool contains_inexact_number(
-    const std::shared_ptr<const SymbolicNode>& node);
 Rational exact_number_as_rational(const NumberNode& node);
 std::shared_ptr<const NumberNode> add_numbers(
     const std::shared_ptr<const NumberNode>& left, const std::shared_ptr<const NumberNode>& right);

@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 #include "transcendental_factor.hpp"
 #include "internal/symbolic_ast.hpp"
 #include "poly_utils.hpp"
@@ -7,7 +9,6 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
-#include <cmath>
 #include <limits>
 #include <cstdint>
 
@@ -20,14 +21,9 @@ static int tf_power_degree(const PowerNode& power, const std::string& var) {
     BigInt exponent(-1);
     if (std::holds_alternative<BigInt>(exp_num->value())) {
         exponent = std::get<BigInt>(exp_num->value());
-    } else if (std::holds_alternative<Rational>(exp_num->value())) {
+    } else {
         const auto& r = std::get<Rational>(exp_num->value());
         if (r.is_integer()) exponent = r.to_bigint();
-    } else if (std::holds_alternative<lmmc_real_t>(exp_num->value())) {
-        lmmc_real_t d = std::get<lmmc_real_t>(exp_num->value());
-        if (std::isfinite(d) && d >= 0 && d == std::floor(d) && d < 1000.0) {
-            exponent = Rational::from_double(d).to_bigint();
-        }
     }
 
     if (exponent.is_negative() || exponent > BigInt(std::numeric_limits<int>::max())) {
@@ -170,8 +166,18 @@ static Result<TfPolyBuildResult> tf_convert_main_variable(
 Result<TfPolyBuildResult> tf_build_polynomial(
     const std::shared_ptr<SymbolicExpr>& poly_expr,
     const std::vector<std::string>& indeterminates,
-    const std::string& original_var) try {
+    const std::string& original_var) {
+    ComputationContext context;
+    return tf_build_polynomial_impl(poly_expr, indeterminates, original_var, context);
+}
 
+Result<TfPolyBuildResult> tf_build_polynomial_impl(
+    const std::shared_ptr<SymbolicExpr>& poly_expr,
+    const std::vector<std::string>& indeterminates,
+    const std::string& original_var, ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, context.limits().max_recursion_depth,
+                                            context.limits().max_ast_nodes,
+                                            "tf_build_polynomial");
     TfPolyBuildResult result;
     result.success = false;
 
@@ -182,7 +188,7 @@ Result<TfPolyBuildResult> tf_build_polynomial(
 
     auto before = tf_polynomial_variables(poly_expr, indeterminates, original_var);
     if (!before.empty() && !tf_validate_polynomial(poly_expr, before)) return result;
-    auto expanded = poly_expr->expand();
+    auto expanded = detail::make_expression_ptr(detail::expand_node(detail::node(poly_expr), transform_budget));
     if (!expanded || !LMCAS::detail::node(expanded)) {
         expanded = poly_expr;
     }
@@ -207,10 +213,10 @@ Result<TfPolyBuildResult> tf_build_polynomial(
     if (result.main_variable.empty() || max_degree < 0) return result;
     return tf_convert_main_variable(std::move(result), expanded, all_variables);
 }
-catch (const std::bad_alloc&) {
+catch (const CasError& error) { return Result<TfPolyBuildResult>::failure(error); } catch (const std::bad_alloc&) {
     return Result<TfPolyBuildResult>::failure(CasErrc::ResourceLimit,
         "allocation failed while constructing polynomial", "tf_build_polynomial");
-} catch (const std::exception& ex) {
+} catch (const std::length_error& error) { return Result<TfPolyBuildResult>::failure(CasErrc::ResourceLimit, error.what(), "tf_build_polynomial"); } catch (const std::exception& ex) {
     return Result<TfPolyBuildResult>::failure(CasErrc::InternalInvariant,
         ex.what(), "tf_build_polynomial");
 }

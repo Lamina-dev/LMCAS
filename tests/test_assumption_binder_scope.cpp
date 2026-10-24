@@ -1,3 +1,6 @@
+#include "internal/assumption_facts.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/rewrite_budget.hpp"
 #include "test_common.hpp"
 #include "assumption_context.hpp"
 #include "internal/visitors/normalization_visitor.hpp"
@@ -13,13 +16,19 @@ using namespace LMCAS;
 static std::shared_ptr<const SymbolicNode> normalize_with_ctx(
     const std::shared_ptr<const SymbolicNode> &node,
     const AssumptionContext &ctx) {
-    auto expression = LMCAS::detail::expression_from_node(node);
-    return LMCAS::detail::node(ctx.simplify(expression));
+    ComputationContext context;
+    detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                 context.limits().max_ast_nodes, "test.normalize");
+    detail::AssumptionFacts facts(ctx);
+    return detail::normalize_node(node, budget, facts);
 }
 
 static std::shared_ptr<const SymbolicNode> normalize_no_ctx(
     const std::shared_ptr<const SymbolicNode> &node) {
-    NormalizationVisitor v;
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    NormalizationVisitor v(transform_budget, detail::no_facts(), Domain::Real);
     node->accept(v);
     return v.get_result();
 }

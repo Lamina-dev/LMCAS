@@ -1,3 +1,4 @@
+#include "expr.hpp"
 /**
  * @file test_transform_engine.cpp
  * @brief 积分变换引擎单元测试：Fourier 变换、逆 Fourier 变换、卷积。
@@ -13,23 +14,20 @@ using namespace LMCAS;
 #define M_PI 3.14159265358979323846
 #endif
 
-using Expr = std::shared_ptr<SymbolicExpr>;
-
-static Expr num(int n) { return SymbolicExpr::number(n); }
-static Expr var(const std::string &name) { return SymbolicExpr::variable(name); }
+static ExprPtr num(int n) { return SymbolicExpr::number(n); }
+static ExprPtr var(const std::string &name) { return SymbolicExpr::variable(name); }
 
 // Evaluate a single-variable symbolic result at a numeric point.
-static double eval_at(const Expr &e, const std::string &v, double x) {
-    auto sub = e->substitute(v, SymbolicExpr::number(x));
-    return sub->simplify()->to_numeric();
+static double eval_at(const ExprPtr &e, const std::string &v, double x) {
+    auto sub = LMCAS::substitute(e, v, SymbolicExpr::number(x)).value();
+    return LMCAS::simplify(sub).value()->to_numeric();
 }
 
 // Evaluate a two-variable symbolic result at numeric points.
-static double eval_at2(const Expr &e, const std::string &v1, double x1,
+static double eval_at2(const ExprPtr &e, const std::string &v1, double x1,
                        const std::string &v2, double x2) {
-    auto sub = e->substitute(v1, SymbolicExpr::number(x1))
-                   ->substitute(v2, SymbolicExpr::number(x2));
-    return sub->simplify()->to_numeric();
+    auto sub = LMCAS::substitute(LMCAS::substitute(e, v1, SymbolicExpr::number(x1)).value(), v2, SymbolicExpr::number(x2)).value();
+    return LMCAS::simplify(sub).value()->to_numeric();
 }
 
 TEST(TransformEngine, FourierGaussian) {
@@ -145,9 +143,17 @@ TEST(TransformEngine, InverseFourierGaussian) {
             num(-1), SymbolicExpr::power(w, num(2))));
     auto result = LMCAS::inverse_fourier_transform_checked(
         F, "omega", "t");
-    EXPECT_TRUE((!result &&
-                 result.error().code == LMCAS::CasErrc::Inconclusive))
-        << "approximate Gaussian inverse requires a round-trip proof";
+    ASSERT_TRUE(result) << result.error().message;
+    auto expression = result.value().value.expression;
+    ASSERT_TRUE(expression);
+    auto constant = pi();
+    ASSERT_TRUE(constant);
+    auto expected = SymbolicExpr::multiply(
+        SymbolicExpr::power(SymbolicExpr::multiply(num(2),
+            SymbolicExpr::sqrt(constant.value())), num(-1)),
+        SymbolicExpr::exp(SymbolicExpr::multiply(SymbolicExpr::number(Rational(-1, 4)),
+            SymbolicExpr::power(var("t"), num(2)))));
+    EXPECT_TRUE(test_proved_equivalent(expression, expected));
 }
 
 TEST(TransformEngine, InverseFourierConstantReturnsUnevaluated) {

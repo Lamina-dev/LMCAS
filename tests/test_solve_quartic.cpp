@@ -1,4 +1,6 @@
+#include "expr.hpp"
 #include "test_solve_quartic_support.hpp"
+#include "residual_verification.hpp"
 
 TEST(SolveQuartic, SolveQuarticBiquadratic) {
     auto a = SymbolicExpr::number(1);
@@ -115,6 +117,13 @@ TEST(SolveQuartic, SolveQuarticTinyNonzeroDepressedOddTerm) {
 
     bool found_nonzero_real_root = false;
     for (const auto &root : roots) {
+        auto residual = SymbolicExpr::add(
+            SymbolicExpr::power(root, SymbolicExpr::number(4)),
+            SymbolicExpr::multiply(SymbolicExpr::number(Rational("1e-15")), root));
+        ComputationContext context;
+        auto proof = check_zero_residual(residual, context);
+        ASSERT_TRUE(proof) << proof.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
         try {
             const double value = root->to_numeric();
             if (std::isfinite(value) && std::abs(value + 1e-5) < 1e-12) {
@@ -145,13 +154,22 @@ TEST(SolveQuartic, SolveQuarticResolventScalingPreservesTinyOddTerm) {
     bool found_nonzero_real_root = false;
     const double expected = -std::cbrt(1e-200);
     for (const auto &root : roots) {
-        try {
-            const double value = root->to_numeric();
-            if (std::isfinite(value) &&
-                std::abs((value - expected) / expected) < 1e-12) {
-                found_nonzero_real_root = true;
-            }
-        } catch (const std::exception &) {
+        auto residual = SymbolicExpr::add(
+            SymbolicExpr::power(root, SymbolicExpr::number(4)),
+            SymbolicExpr::multiply(SymbolicExpr::number(Rational("1e-200")), root));
+        ComputationContext context;
+        auto proof = check_zero_residual(residual, context);
+        ASSERT_TRUE(proof) << proof.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+        auto value = evaluate_numeric(*root);
+        if (!value) {
+            EXPECT_EQ(value.error().code, CasErrc::DomainError)
+                << value.error().message;
+            continue;
+        }
+        if (std::isfinite(value.value().value) &&
+            std::abs((value.value().value - expected) / expected) < 1e-12) {
+            found_nonzero_real_root = true;
         }
     }
     EXPECT_TRUE((found_nonzero_real_root)) << "scaled resolvent preserves the tiny nonzero real root";
@@ -171,7 +189,7 @@ TEST(SolveQuartic, SolveQuarticTinyNegativeQuadraticResolventRoot) {
     int nonreal_roots = 0;
     std::ostringstream root_details;
     for (const auto &root : roots) {
-        const std::string text = root->simplify()->to_string();
+        const std::string text = LMCAS::simplify(root).value()->to_string();
         root_details << " [" << text << "]";
         if (text == "-1") {
             ++repeated_real_roots;
@@ -195,7 +213,7 @@ TEST(SolveQuartic, SolveQuarticComplexQuadraticResolventRoots) {
 
     bool fabricated_real_root = false;
     for (const auto &root : roots) {
-        const std::string text = root->simplify()->to_string();
+        const std::string text = LMCAS::simplify(root).value()->to_string();
         if (text == "0" || text == "-2") {
             fabricated_real_root = true;
         }
@@ -218,7 +236,7 @@ TEST(SolveQuartic, SolveQuarticTinyComplexPairIsNotClampedReal) {
     int nonreal_roots = 0;
     std::ostringstream root_details;
     for (const auto &root : roots) {
-        root_details << " [" << root->simplify()->to_string();
+        root_details << " [" << LMCAS::simplify(root).value()->to_string();
         try {
             root_details << " -> " << root->to_numeric();
         } catch (const std::exception &) {

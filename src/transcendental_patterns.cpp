@@ -1,3 +1,4 @@
+#include "internal/expression_transform.hpp"
 #include "internal/transcendental_solver_support.hpp"
 #include "internal/expression_analysis.hpp"
 #include "lmmc/config.h"
@@ -140,7 +141,10 @@ std::optional<std::shared_ptr<SymbolicExpr>> lambert_inner(
 }
 
 std::optional<LambertWPattern> opposite_exponential_lambert_pattern(
-    const AddNode& sum, const std::string& var) {
+    const AddNode& sum, const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (sum.operands().size() != 2) {
         return std::nullopt;
     }
@@ -158,16 +162,19 @@ std::optional<LambertWPattern> opposite_exponential_lambert_pattern(
             !expression_depends_on_variable(argument, var)) {
             continue;
         }
-        auto inner = SymbolicExpr::multiply(
-            SymbolicExpr::number(-1), make_expression_ptr(argument))->simplify();
+        auto inner = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+            SymbolicExpr::number(-1), make_expression_ptr(argument))), transform_budget));
         return LambertWPattern{std::move(inner), SymbolicExpr::number(1)};
     }
     return std::nullopt;
 }
 
 std::optional<LambertWPattern> additive_lambert_pattern(
-    const AddNode& sum, const std::string& var) {
-    if (auto direct = opposite_exponential_lambert_pattern(sum, var)) {
+    const AddNode& sum, const std::string& var, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    if (auto direct = opposite_exponential_lambert_pattern(sum, var, context)) {
         return direct;
     }
     std::optional<std::shared_ptr<SymbolicExpr>> found;
@@ -191,12 +198,13 @@ std::optional<LambertWPattern> additive_lambert_pattern(
     if (!found || other_variables) {
         return std::nullopt;
     }
-    auto rhs = SymbolicExpr::multiply(
-        constant_sum(std::move(constants)), SymbolicExpr::number(-1))->simplify();
+    auto rhs = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+        constant_sum(std::move(constants)), SymbolicExpr::number(-1))), transform_budget));
     return LambertWPattern{*found, rhs};
 }
 
-std::optional<ExpBasePattern> power_pattern(const PowerNode& power, const std::string& var) {
+std::optional<ExpBasePattern> power_pattern(
+    const PowerNode& power, const std::string& var, ComputationContext& context) {
     if (expression_depends_on_variable(power.base(), var) ||
         !expression_depends_on_variable(power.exponent(), var)) {
         return std::nullopt;
@@ -204,20 +212,23 @@ std::optional<ExpBasePattern> power_pattern(const PowerNode& power, const std::s
     auto base = make_expression_ptr(power.base());
     auto exponent = make_expression_ptr(power.exponent());
     lmmc_real_t value;
-    if (try_evaluate_numeric(base, value) && value > 0 &&
+    if (try_evaluate_numeric(base, value, context) && value > 0 &&
         std::abs(value - 1.0) > LMMC_REAL_EPSILON) {
         return ExpBasePattern{base, exponent, nullptr};
     }
     return std::nullopt;
 }
 
-std::optional<ExpBasePattern> additive_power_pattern(const AddNode& sum, const std::string& var) {
+std::optional<ExpBasePattern> additive_power_pattern(
+    const AddNode& sum, const std::string& var, ComputationContext& context) {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     std::optional<ExpBasePattern> found;
     std::vector<std::shared_ptr<const SymbolicNode>> constants;
     bool other_variables = false;
     for (const auto& operand : sum.operands()) {
         if (auto power = std::dynamic_pointer_cast<const PowerNode>(operand)) {
-            auto candidate = power_pattern(*power, var);
+            auto candidate = power_pattern(*power, var, context);
             if (candidate && !found) {
                 found = std::move(candidate);
                 continue;
@@ -232,8 +243,8 @@ std::optional<ExpBasePattern> additive_power_pattern(const AddNode& sum, const s
     if (!found || other_variables) {
         return std::nullopt;
     }
-    found->rhs = SymbolicExpr::multiply(
-        constant_sum(std::move(constants)), SymbolicExpr::number(-1))->simplify();
+    found->rhs = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
+        constant_sum(std::move(constants)), SymbolicExpr::number(-1))), transform_budget));
     return found;
 }
 
@@ -257,7 +268,7 @@ std::optional<InversePattern> decompose_trig_exp_pattern(
 }
 
 std::optional<LambertWPattern> decompose_lambert_w_pattern(
-    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var, ComputationContext& context) {
     if (!expr || !node(expr)) {
         return std::nullopt;
     }
@@ -268,25 +279,26 @@ std::optional<LambertWPattern> decompose_lambert_w_pattern(
         }
     }
     if (auto sum = std::dynamic_pointer_cast<const AddNode>(node(expr))) {
-        return additive_lambert_pattern(*sum, var);
+        return additive_lambert_pattern(*sum, var, context);
     }
     return std::nullopt;
 }
 
 std::optional<ExpBasePattern> decompose_exp_base_pattern(
-    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var) {
+    const std::shared_ptr<SymbolicExpr>& expr, const std::string& var,
+    ComputationContext& context) {
     if (!expr || !node(expr)) {
         return std::nullopt;
     }
     if (auto power = std::dynamic_pointer_cast<const PowerNode>(node(expr))) {
-        auto pattern = power_pattern(*power, var);
+        auto pattern = power_pattern(*power, var, context);
         if (pattern) {
             pattern->rhs = SymbolicExpr::number(0);
             return pattern;
         }
     }
     if (auto sum = std::dynamic_pointer_cast<const AddNode>(node(expr))) {
-        return additive_power_pattern(*sum, var);
+        return additive_power_pattern(*sum, var, context);
     }
     return std::nullopt;
 }

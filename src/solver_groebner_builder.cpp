@@ -24,12 +24,6 @@ std::optional<BigInt> integer_exponent(const PowerNode& node) {
             return rational.to_bigint();
         }
     }
-    if (std::holds_alternative<lmmc_real_t>(value)) {
-        lmmc_real_t real = std::get<lmmc_real_t>(value);
-        if (std::isfinite(real) && real == std::floor(real)) {
-            return Rational::from_double(real).to_bigint();
-        }
-    }
     return std::nullopt;
 }
 
@@ -45,8 +39,9 @@ bool power_degrees_fit(const Poly& base, int exponent) {
 }
 
     PolyBuilder::PolyBuilder(const std::vector<std::string>& v, PolyContext& ctx, bool strict)
-        : vars(v), ext_vars(ctx.ext_vars), transcendental_map(ctx.transcendental_map),
-          aux_to_node(&ctx.aux_to_node), result(ctx.ext_vars.size()), strict_mode(strict) {}
+        : SymbolicVisitor(&ctx.budget), vars(v), ext_vars(ctx.ext_vars),
+          transcendental_map(ctx.transcendental_map), aux_to_node(&ctx.aux_to_node),
+          result(ctx.ext_vars.size()), strict_mode(strict) {}
 
         void PolyBuilder::visit(const NumberNode& node) {
             result = Poly(ext_vars.size());
@@ -55,9 +50,6 @@ bool power_degrees_fit(const Poly& base, int exponent) {
                 result.add_term(std::vector<int>(ext_vars.size(), 0), std::get<Rational>(node.value()));
             } else if (std::holds_alternative<BigInt>(node.value())) {
                 result.add_term(std::vector<int>(ext_vars.size(), 0), Rational(std::get<BigInt>(node.value())));
-            } else if (std::holds_alternative<lmmc_real_t>(node.value())) {
-                result.add_term(std::vector<int>(ext_vars.size(), 0),
-                    Rational::from_double(std::get<lmmc_real_t>(node.value())));
             }
         }
 
@@ -88,7 +80,8 @@ bool power_degrees_fit(const Poly& base, int exponent) {
         void PolyBuilder::visit(const AddNode& node) {
             Poly sum(ext_vars.size());
             for (auto& op : node.operands()) {
-                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
+                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node,
+                              *rewrite_budget(), strict_mode);
                 op->accept(b);
                 if (b.failed) { failed = true; return; }
 
@@ -104,7 +97,8 @@ bool power_degrees_fit(const Poly& base, int exponent) {
             prod.add_term(std::vector<int>(ext_vars.size(), 0), Rational(1));
 
             for (auto& op : node.operands()) {
-                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
+                PolyBuilder b(vars, ext_vars, transcendental_map, aux_to_node,
+                              *rewrite_budget(), strict_mode);
                 op->accept(b);
                 if (b.failed) { failed = true; return; }
                 Poly b_res = b.get_result();
@@ -116,7 +110,8 @@ bool power_degrees_fit(const Poly& base, int exponent) {
         }
 
 void PolyBuilder::visit(const PowerNode& node) {
-    PolyBuilder builder(vars, ext_vars, transcendental_map, aux_to_node, strict_mode);
+    PolyBuilder builder(vars, ext_vars, transcendental_map, aux_to_node,
+                        *rewrite_budget(), strict_mode);
     node.base()->accept(builder);
     if (builder.failed) {
         failed = true;

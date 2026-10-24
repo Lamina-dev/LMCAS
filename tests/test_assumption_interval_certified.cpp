@@ -47,12 +47,12 @@ static void expect_extreme_exact_enclosures(InferenceEngine &engine) {
                             std::vector<std::shared_ptr<const SymbolicNode>>{huge_node, huge_node}))),
                         huge + huge, huge + huge);
     const double tiny = std::numeric_limits<double>::denorm_min();
-    const Rational exact_tiny = Rational::from_double(tiny);
+    const Rational exact_tiny("5e-324");
     expect_exact_bounds(engine.propagate_bounds(test_expression_from_node(detail::make_node<MultiplyNode>(
                             std::vector<std::shared_ptr<const SymbolicNode>>{make_num(tiny), make_num(tiny)}))),
                         exact_tiny * exact_tiny, exact_tiny * exact_tiny);
     const double maximum = std::numeric_limits<double>::max();
-    const Rational exact_maximum = Rational::from_double(maximum);
+    const Rational exact_maximum("1.7976931348623157e308");
     expect_exact_bounds(engine.propagate_bounds(test_expression_from_node(detail::make_node<AddNode>(
                             std::vector<std::shared_ptr<const SymbolicNode>>{make_num(maximum), make_num(maximum)}))),
                         exact_maximum + exact_maximum, exact_maximum + exact_maximum);
@@ -71,14 +71,14 @@ TEST(AssumptionIntervalCertified, ExactEnclosures) {
     auto exact = engine.propagate_bounds(*tenth);
     auto approximate = engine.propagate_bounds(test_expression_from_node(make_num(0.1)));
     expect_exact_bounds(exact, Rational(1, 10), Rational(1, 10));
-    EXPECT_TRUE((approximate.has_value())) << "binary64 point has exact bounds";
+    expect_exact_bounds(approximate, Rational(1, 10), Rational(1, 10));
     if (exact && approximate) {
         auto same = IntervalUnion::from_single(*exact).intersect_checked(
             IntervalUnion::from_single(Interval::point(tenth)));
         EXPECT_TRUE((same && !same.value().is_empty())) << "exact tenth intersects itself";
         auto distinct = IntervalUnion::from_single(*exact).intersect_checked(
             IntervalUnion::from_single(*approximate));
-        EXPECT_TRUE((distinct && distinct.value().is_empty())) << "binary64 .1 and exact 1/10 are different points";
+        EXPECT_TRUE((distinct && !distinct.value().is_empty())) << "decimal .1 and exact 1/10 are the same point";
     }
     auto add = detail::make_node<AddNode>(
         std::vector<std::shared_ptr<const SymbolicNode>>{detail::node(tenth), detail::node(fifth)});

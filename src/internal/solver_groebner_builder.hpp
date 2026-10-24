@@ -32,9 +32,10 @@ namespace LMCAS::groebner_detail {
                     std::vector<std::string>& ext_v,
                     std::unordered_map<std::string, size_t>& trans_map,
                     std::unordered_map<size_t, std::shared_ptr<const SymbolicNode>>* aux_map,
-                    bool strict = false)
-            : vars(v), ext_vars(ext_v), transcendental_map(trans_map),
-              aux_to_node(aux_map), result(ext_v.size()), strict_mode(strict) {}
+                    detail::RewriteBudget& budget, bool strict = false)
+            : SymbolicVisitor(&budget), vars(v), ext_vars(ext_v),
+              transcendental_map(trans_map), aux_to_node(aux_map),
+              result(ext_v.size()), strict_mode(strict) {}
 
         Poly get_result() const { return result; }
         bool failed = false;

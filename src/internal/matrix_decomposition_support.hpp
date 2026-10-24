@@ -1,3 +1,4 @@
+#include "computation_context.hpp"
 #pragma once
 
 #include "matrix_decomposition.hpp"
@@ -16,15 +17,15 @@ Result<void> validate_decomposition_output(
 std::optional<Rational> exact_rational_expr(
     const std::shared_ptr<const SymbolicNode>& node);
 std::optional<Rational> exact_rational_expr(
-    const std::shared_ptr<SymbolicExpr>& expr);
+    const std::shared_ptr<SymbolicExpr>& expr, ComputationContext& context);
 std::shared_ptr<SymbolicExpr> exact_number_expr(const Rational& value);
 std::optional<std::vector<std::vector<Rational>>> exact_rational_matrix(
-    const std::shared_ptr<const MatrixNode>& matrix);
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context);
 std::shared_ptr<SymbolicExpr> identity_matrix_expr(std::size_t n);
 std::optional<std::vector<Rational>> exact_rectangular_diagonal_entries(
-    const std::shared_ptr<const MatrixNode>& matrix);
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context);
 std::optional<std::vector<Rational>> exact_diagonal_entries(
-    const std::shared_ptr<const MatrixNode>& matrix);
+    const std::shared_ptr<const MatrixNode>& matrix, ComputationContext& context);
 std::shared_ptr<SymbolicExpr> rectangular_diagonal_expr(
     std::size_t rows, std::size_t cols, const std::vector<Rational>& diagonal);
 

@@ -2,6 +2,7 @@
 
 #include "rational.hpp"
 #include "symbolic.hpp"
+#include "internal/rewrite_budget.hpp"
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -43,9 +44,12 @@ struct PolyContext {
     std::unordered_map<std::string, size_t> transcendental_map;
     std::unordered_map<size_t, std::shared_ptr<const SymbolicNode>> aux_to_node;
     size_t num_original_vars;
+    detail::RewriteBudget budget;
 
-    PolyContext(const std::vector<std::string>& variables)
-        : ext_vars(variables), num_original_vars(variables.size()) {}
+    PolyContext(const std::vector<std::string>& variables, ComputationContext& context)
+        : ext_vars(variables), num_original_vars(variables.size()),
+          budget(context, context.limits().max_recursion_depth,
+                 context.limits().max_ast_nodes, "groebner.convert") {}
 };
 
 struct SugarPair {
@@ -77,4 +81,8 @@ void reduce_basis(std::vector<Poly>& basis);
 Poly to_poly(const SymbolicExpr& expression, PolyContext& context);
 SymbolicExpr from_poly_ext(
     const Poly& polynomial, const PolyContext& context);
+std::vector<SymbolicExpr> reduced_groebner_basis_impl(
+    const std::vector<SymbolicExpr>& polynomials,
+    const std::vector<std::string>& variables, ComputationContext& context);
+
 }

@@ -10,11 +10,11 @@ namespace LMCAS::detail {
 using namespace matrix_kernel;
 namespace {
 void subtract_pivot_row(ExactMatrixData& matrix, std::size_t row,
-                        std::size_t pivot_row, const ExprPtr& factor) {
+                        std::size_t pivot_row, const ExprPtr& factor, ComputationContext& context) {
     for (std::size_t target = 0; target < matrix.cols; ++target) {
         matrix.at(row, target) = exact_subtract(
             matrix.at(row, target),
-            exact_multiply(factor, matrix.at(pivot_row, target)));
+            exact_multiply(factor, matrix.at(pivot_row, target), context), context);
     }
 }
 
@@ -26,8 +26,8 @@ Result<void> eliminate_below(ExactMatrixData& matrix, std::size_t pivot_row,
         auto proof = classify_exact_zero(matrix.at(row, column), context, operation);
         if (!proof) return Result<void>::failure(proof.error());
         if (proof.value() == ZeroProof::Zero) continue;
-        auto factor = exact_divide(matrix.at(row, column), pivot_value);
-        subtract_pivot_row(matrix, row, pivot_row, factor);
+        auto factor = exact_divide(matrix.at(row, column), pivot_value, context);
+        subtract_pivot_row(matrix, row, pivot_row, factor, context);
     }
     return Result<void>::success();
 }
@@ -37,10 +37,10 @@ Result<void> reduce_above(EliminationResult& result, ComputationContext& context
     for (std::size_t pivot_index = result.rank; pivot_index-- > 0;) {
         const std::size_t row = pivot_index;
         const std::size_t column = result.pivot_columns[pivot_index];
-        auto pivot_value = simplify_expr(result.matrix.at(row, column));
+        auto pivot_value = simplify_expr(result.matrix.at(row, column), context);
         for (std::size_t target = 0; target < result.matrix.cols; ++target) {
             result.matrix.at(row, target) = exact_divide(
-                result.matrix.at(row, target), pivot_value);
+                result.matrix.at(row, target), pivot_value, context);
         }
         for (std::size_t upper = 0; upper < row; ++upper) {
             auto proof = classify_exact_zero(
@@ -48,7 +48,7 @@ Result<void> reduce_above(EliminationResult& result, ComputationContext& context
             if (!proof) return Result<void>::failure(proof.error());
             if (proof.value() == ZeroProof::Zero) continue;
             auto factor = result.matrix.at(upper, column);
-            subtract_pivot_row(result.matrix, upper, row, factor);
+            subtract_pivot_row(result.matrix, upper, row, factor, context);
         }
     }
     return Result<void>::success();
@@ -71,7 +71,7 @@ Result<void> eliminate_forward(
             swap_rows(result.matrix, *pivot.value(), pivot_row);
             ++result.row_swaps;
         }
-        auto pivot_value = simplify_expr(result.matrix.at(pivot_row, column));
+        auto pivot_value = simplify_expr(result.matrix.at(pivot_row, column), context);
         result.pivot_columns.push_back(column);
         result.pivot_values.push_back(pivot_value);
         auto reduced = eliminate_below(

@@ -1,3 +1,4 @@
+#include "internal/rewrite_budget.hpp"
 #include "test_common.hpp"
 #include "internal/visitors/normalization_visitor.hpp"
 #include "internal/facts_query.hpp"
@@ -11,7 +12,10 @@
 using namespace LMCAS;
 
 static std::shared_ptr<const SymbolicNode> normalize_node(const std::shared_ptr<const SymbolicNode> &node) {
-    NormalizationVisitor visitor;
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    NormalizationVisitor visitor(transform_budget, detail::no_facts(), Domain::Real);
     node->accept(visitor);
     return visitor.get_result();
 }
@@ -27,8 +31,8 @@ TEST(LmcasDomainPreservingSimplify, FractionalExpansionAndExactIdentities) {
     auto x = SymbolicExpr::variable("x");
     for (const auto &exponent : {SymbolicExpr::number(Rational(3, 2)),
                                  SymbolicExpr::number(1.5)}) {
-        auto expanded = SymbolicExpr::power(x, exponent)->expand();
-        auto evaluated = expanded->substitute("x", SymbolicExpr::number(4));
+        auto expanded = LMCAS::expand(SymbolicExpr::power(x, exponent)).value();
+        auto evaluated = LMCAS::substitute(expanded, "x", SymbolicExpr::number(4)).value();
         {
             const double actual_value = evaluated->to_numeric();
             const double expected_value = 8.0;
@@ -155,7 +159,7 @@ static void expect_domain_projection(const Node &expression, int value, Tribool 
     }
     Tribool actual = Tribool::True;
     for (const auto &predicate : *result.value()) {
-        auto substituted = predicate->substitute("x", SymbolicExpr::number(value));
+        auto substituted = LMCAS::substitute(predicate, "x", SymbolicExpr::number(value)).value();
         const auto truth = domain_predicate_value(detail::node(substituted));
         if (truth == Tribool::False) {
             actual = Tribool::False;
@@ -263,11 +267,11 @@ static void expect_partial_arithmetic_transformations(
         SymbolicExpr::power(x, zero), SymbolicExpr::power(one, inverse)};
     for (std::size_t index = 0; index < expressions.size(); ++index) {
         const auto &expression = expressions[index];
-        for (const auto &transformed : {expression, expression->simplify(), expression->expand()}) {
+        for (const auto &transformed : {expression, LMCAS::simplify(expression).value(), LMCAS::expand(expression).value()}) {
             expect_real_value(transformed, {{"x", 0}}, std::nullopt);
             expect_real_value(transformed, {{"x", 2}}, index < 2 ? 0.0 : 1.0);
-            expect_real_value(transformed->substitute("x", zero)->simplify(), {}, std::nullopt);
-            expect_real_value(transformed->substitute("x", SymbolicExpr::number(2))->simplify(),
+            expect_real_value(LMCAS::simplify(LMCAS::substitute(transformed, "x", zero).value()).value(), {}, std::nullopt);
+            expect_real_value(LMCAS::simplify(LMCAS::substitute(transformed, "x", SymbolicExpr::number(2)).value()).value(),
                               {}, index < 2 ? 0.0 : 1.0);
         }
     }
@@ -275,12 +279,12 @@ static void expect_partial_arithmetic_transformations(
 
 static void expect_constant_domain_transformations(const ExprPtr &zero) {
     for (const auto &expression : {SymbolicExpr::ln(zero), SymbolicExpr::power(zero, zero)}) {
-        for (const auto &transformed : {expression, expression->simplify(), expression->expand()}) {
+        for (const auto &transformed : {expression, LMCAS::simplify(expression).value(), LMCAS::expand(expression).value()}) {
             expect_real_value(transformed, {}, std::nullopt);
         }
     }
     auto zero_power = SymbolicExpr::power(zero, zero);
-    for (const auto &transformed : {zero_power, zero_power->simplify(), zero_power->expand()}) {
+    for (const auto &transformed : {zero_power, LMCAS::simplify(zero_power).value(), LMCAS::expand(zero_power).value()}) {
         auto value = eval_complex(*transformed);
         EXPECT_TRUE((value && value.value().real.value == 1 && value.value().imag.value == 0)) << "complex integer zero power keeps its separate convention";
     }
@@ -291,7 +295,7 @@ static void expect_factory_operand_domains(const ExprPtr &zero, const ExprPtr &o
     const auto undefined_exponent = detail::make_node<PowerNode>(raw_zero, raw_zero);
     const auto nested_zero = detail::make_expression_ptr(
         detail::make_node<PowerNode>(raw_zero, undefined_exponent));
-    for (const auto &transformed : {nested_zero, nested_zero->simplify(), nested_zero->expand(),
+    for (const auto &transformed : {nested_zero, LMCAS::simplify(nested_zero).value(), LMCAS::expand(nested_zero).value(),
                                     detail::make_expression_ptr(SymbolicFactory::create_power(raw_zero, undefined_exponent))}) {
         expect_real_value(transformed, {}, std::nullopt);
     }
@@ -304,7 +308,7 @@ static void expect_factory_operand_domains(const ExprPtr &zero, const ExprPtr &o
     EXPECT_TRUE((rejected)) << "zero does not skip validation of later factory operands";
     auto factory = detail::make_expression_ptr(SymbolicFactory::create_multiply({raw_zero, SymbolicFactory::create_power(raw_zero, detail::node(SymbolicExpr::number(-1)))}));
     expect_real_value(factory, {}, std::nullopt);
-    expect_real_value(factory->simplify(), {}, std::nullopt);
+    expect_real_value(LMCAS::simplify(factory).value(), {}, std::nullopt);
     auto undefined_component = SymbolicFactory::create_complex(detail::node(one),
                                                                SymbolicFactory::create_power(raw_zero, detail::node(SymbolicExpr::number(-1))));
     auto complex_zero_power = detail::make_expression_ptr(SymbolicFactory::create_power(
@@ -319,10 +323,10 @@ TEST(LmcasDomainPreservingSimplify, DomainPreservingTransformations) {
     expect_partial_arithmetic_transformations(x, zero, one);
     expect_constant_domain_transformations(zero);
     auto cancelled_polynomial = SymbolicExpr::add(x, SymbolicExpr::multiply(SymbolicExpr::number(-1), x));
-    EXPECT_TRUE((cancelled_polynomial->simplify()->is_zero())) << "polynomial cancellation remains valid";
-    EXPECT_TRUE((SymbolicExpr::multiply(zero, x)->simplify()->is_zero())) << "zero times a finite variable is zero";
+    EXPECT_TRUE((LMCAS::simplify(cancelled_polynomial).value()->is_zero())) << "polynomial cancellation remains valid";
+    EXPECT_TRUE((LMCAS::simplify(SymbolicExpr::multiply(zero, x)).value()->is_zero())) << "zero times a finite variable is zero";
     auto polynomial = SymbolicExpr::power(SymbolicExpr::add(x, one), SymbolicExpr::number(3));
-    expect_real_value(polynomial->expand(), {{"x", 2}}, 27.0);
+    expect_real_value(LMCAS::expand(polynomial).value(), {{"x", 2}}, 27.0);
     expect_factory_operand_domains(zero, one);
 }
 
@@ -331,30 +335,30 @@ TEST(LmcasDomainPreservingSimplify, PowerAndLogarithmBranches) {
     auto y = SymbolicExpr::variable("y");
     auto product = SymbolicExpr::multiply(x, y);
     auto root = SymbolicExpr::power(product, SymbolicExpr::number(Rational(1, 2)));
-    for (const auto &transformed : {root, root->simplify(), root->expand()}) {
+    for (const auto &transformed : {root, LMCAS::simplify(root).value(), LMCAS::expand(root).value()}) {
         expect_real_value(transformed, {{"x", -1}, {"y", -4}}, 2.0);
         expect_real_value(transformed, {{"x", 1}, {"y", 4}}, 2.0);
         expect_real_value(transformed, {{"x", 0}, {"y", 4}}, 0.0);
         expect_real_value(transformed, {{"x", -1}, {"y", 4}}, std::nullopt);
     }
     auto negative_power = SymbolicExpr::power(product, SymbolicExpr::number(-2));
-    expect_real_value(negative_power->simplify(), {{"x", 0}, {"y", 4}}, std::nullopt);
-    expect_real_value(negative_power->simplify(), {{"x", -1}, {"y", 4}}, 1.0 / 16);
+    expect_real_value(LMCAS::simplify(negative_power).value(), {{"x", 0}, {"y", 4}}, std::nullopt);
+    expect_real_value(LMCAS::simplify(negative_power).value(), {{"x", -1}, {"y", 4}}, 1.0 / 16);
     auto nested = SymbolicExpr::power(
         SymbolicExpr::power(x, SymbolicExpr::number(Rational(1, 2))), SymbolicExpr::number(2));
-    expect_real_value(nested->simplify(), {{"x", -1}}, std::nullopt);
-    expect_real_value(nested->simplify(), {{"x", 4}}, 4.0);
+    expect_real_value(LMCAS::simplify(nested).value(), {{"x", -1}}, std::nullopt);
+    expect_real_value(LMCAS::simplify(nested).value(), {{"x", 4}}, 4.0);
     auto logarithm = SymbolicExpr::ln(SymbolicExpr::power(x, SymbolicExpr::number(2)));
-    for (const auto &transformed : {logarithm, logarithm->simplify(), logarithm->expand()}) {
+    for (const auto &transformed : {logarithm, LMCAS::simplify(logarithm).value(), LMCAS::expand(logarithm).value()}) {
         expect_real_value(transformed, {{"x", -2}}, std::log(4.0));
         expect_real_value(transformed, {{"x", 0}}, std::nullopt);
     }
     auto exponential_log = SymbolicExpr::ln(SymbolicExpr::exp(x));
-    EXPECT_TRUE((detail::node(exponential_log->simplify())->equals(*detail::node(exponential_log)))) << "unknown complex exponent cannot escape the logarithm principal branch";
+    EXPECT_TRUE((detail::node(LMCAS::simplify(exponential_log).value())->equals(*detail::node(exponential_log)))) << "unknown complex exponent cannot escape the logarithm principal branch";
     auto imaginary = detail::make_expression_ptr(detail::make_node<ComplexNode>(
         detail::node(SymbolicExpr::number(0)), detail::node(SymbolicExpr::number(4))));
     auto complex_log = SymbolicExpr::ln(SymbolicExpr::exp(imaginary));
-    EXPECT_TRUE((dynamic_cast<const FunctionNode *>(detail::node(complex_log->simplify()).get()) != nullptr)) << "explicit nonreal exponent is not returned from ln(exp(z))";
+    EXPECT_TRUE((dynamic_cast<const FunctionNode *>(detail::node(LMCAS::simplify(complex_log).value()).get()) != nullptr)) << "explicit nonreal exponent is not returned from ln(exp(z))";
 
     auto matrix = SymbolicExpr::matrix({{SymbolicExpr::number(1), x}, {SymbolicExpr::number(0), SymbolicExpr::number(1)}});
     auto matrix_product = detail::make_node<MultiplyNode>(
@@ -400,7 +404,7 @@ static void expect_conditional_projection_boundaries(
     for (int value : {-2, 0, 2}) {
         Tribool accepted = Tribool::True;
         for (const auto &condition : conditions) {
-            auto bound = condition->substitute("x", SymbolicExpr::number(value));
+            auto bound = LMCAS::substitute(condition, "x", SymbolicExpr::number(value)).value();
             const auto result = assumptions.evaluate_condition(*bound);
             if (result == Tribool::False) {
                 accepted = Tribool::False;
@@ -450,7 +454,7 @@ static void expect_zero_power_projection(
     for (const auto& [value, expected] : bindings) {
         Tribool accepted = Tribool::True;
         for (const auto& condition : *projection.value()) {
-            auto bound = condition->substitute("z", SymbolicExpr::number(value));
+            auto bound = LMCAS::substitute(condition, "z", SymbolicExpr::number(value)).value();
             const auto truth = domain_predicate_value(detail::node(bound));
             if (truth != Tribool::True) { accepted = truth; break; }
         }

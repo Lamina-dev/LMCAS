@@ -1,7 +1,10 @@
 
 #include "test_common.hpp"
+#include "expr.hpp"
 #include "integration.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/normalization_utils.hpp"
+#include "residual_verification.hpp"
 
 #include <memory>
 #include <string>
@@ -151,12 +154,21 @@ void verify_case(const Case &c) {
     }
 
     Integrator integ;
-    auto integrated = integ.integrate(*integrand, kVarName);
+    ComputationContext context;
+    auto integrated = integ.integrate_checked(*integrand, kVarName, context);
     if (!integrated) {
         ADD_FAILURE() << c.name + ": integration failed: " + integrated.error().message;
         return;
     }
-    auto result = LMCAS::detail::make_expression_ptr(integrated.value());
+    auto result = std::make_shared<SymbolicExpr>(std::move(integrated.value()));
+    EXPECT_FALSE(detail::contains_node_type<IntegralNode>(detail::node(result)));
+    auto derivative = differentiate(result, kVarName, context);
+    ASSERT_TRUE(derivative) << c.name << ": " << derivative.error().message;
+    auto residual = SymbolicExpr::add(derivative.value(),
+        SymbolicExpr::multiply(SymbolicExpr::number(-1), integrand));
+    auto proof = check_zero_residual(residual, context);
+    ASSERT_TRUE(proof) << c.name << ": " << proof.error().message;
+    EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value())) << c.name;
 
     bool ok = ast_contains_functype(LMCAS::detail::node(result), c.expected);
     if (!ok) {
@@ -175,5 +187,30 @@ TEST(SpecialFunctionAst, IntegrationProducesExpectedFunctionNodes) {
     for (const auto &c : cases()) {
         SCOPED_TRACE(c.name);
         verify_case(c);
+    }
+}
+
+TEST(SpecialFunctionAst, NearReciprocalExponentDoesNotSnap) {
+    auto x = SymbolicExpr::variable("x");
+    for (double exponent : {-1.0 + 1e-13, -1.0 - 1e-13}) {
+        auto power = SymbolicExpr::number(exponent);
+        auto exact = detail::exact_rational_value(detail::node(power));
+        ASSERT_TRUE(exact);
+        EXPECT_NE(*exact, Rational(-1));
+        auto integrand = SymbolicExpr::multiply(SymbolicExpr::exp(x),
+            SymbolicExpr::power(x, power));
+        Integrator integrator;
+        ComputationContext context;
+        auto result = integrator.integrate_checked(*integrand, "x", context);
+        ASSERT_TRUE(result) << result.error().message;
+        if (auto integral = std::dynamic_pointer_cast<const IntegralNode>(detail::node(result.value()))) {
+            EXPECT_TRUE(integral->body()->equals(*detail::node(integrand)));
+        } else {
+            auto derivative = differentiate(detail::make_expression_ptr(result.value()), "x", context);
+            ASSERT_TRUE(derivative) << derivative.error().message;
+            auto proof = check_equivalent(derivative.value(), integrand, context);
+            ASSERT_TRUE(proof) << proof.error().message;
+            EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+        }
     }
 }

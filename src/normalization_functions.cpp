@@ -33,7 +33,7 @@ bool NormalizationVisitor::normalize_logarithm(
     normalization_check_children(rewrite_budget(), 2, denominator);
     auto reciprocal = detail::make_node<PowerNode>(denominator, detail::make_node<NumberNode>(BigInt(-1)));
     auto quotient = make_normalized_multiply_node({numerator, reciprocal}, rewrite_budget());
-    NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+    NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
     quotient->accept(visitor);
     set_result(visitor.get_result());
     return true;
@@ -50,7 +50,7 @@ bool NormalizationVisitor::normalize_natural_logarithm(
         auto logarithm = detail::make_node<FunctionNode>(FunctionNode::FuncType::Ln,
             std::vector<std::shared_ptr<const SymbolicNode>>{power->base()});
         auto product = make_normalized_multiply_node({power->exponent(), logarithm}, rewrite_budget());
-        NormalizationVisitor visitor(context_, facts_, domain_, rewrite_budget());
+        NormalizationVisitor visitor(*rewrite_budget(), facts_, domain_);
         product->accept(visitor);
         set_result(visitor.get_result());
         return true;

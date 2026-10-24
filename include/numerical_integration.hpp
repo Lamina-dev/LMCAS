@@ -10,6 +10,11 @@
 
 namespace LMCAS {
 
+struct QuadratureEstimate {
+    double value = 0.0;
+    double estimated_error = 0.0;
+};
+
 /**
  * @brief Checked composite Simpson integration.
  *
@@ -21,10 +26,10 @@ namespace LMCAS {
  * mathematical span need not itself be representable as a double when the
  * result is finite.
  * The returned value is the step-doubling Richardson extrapolation
- * `S(2n) + (S(2n) - S(n)) / 15`; absolute_error is the corresponding
+ * `S(2n) + (S(2n) - S(n)) / 15`; estimated_error is the corresponding
  * `abs(S(2n) - S(n)) / 15` estimate, not a certified bound.
  */
-LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
+LMCAS_API Result<QuadratureEstimate> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -33,7 +38,7 @@ LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
     int n = 100
 );
 
-LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
+LMCAS_API Result<QuadratureEstimate> quadrature_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -46,10 +51,10 @@ LMCAS_API Result<ApproxReal> quadrature_simpson_numeric(
  * Every supported order is evaluated by LMMC's Gauss-Legendre implementation.
  * Equal finite endpoints return exact zero before reserving quadrature samples.
  * Other finite extreme endpoints use an overflow-safe affine map to [-1,1].
- * The returned absolute_error is the difference from an adjacent-order rule,
+ * The returned estimated_error is the difference from an adjacent-order rule,
  * not a certified bound.
  */
-LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
+LMCAS_API Result<QuadratureEstimate> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -58,7 +63,7 @@ LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
     int n = 5
 );
 
-LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
+LMCAS_API Result<QuadratureEstimate> quadrature_gaussian_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -73,8 +78,9 @@ LMCAS_API Result<ApproxReal> quadrature_gaussian_numeric(
  * variables, domain errors, cancellation, and budget exhaustion are represented
  * by CasError in the Result channel. Finite extreme endpoints are bisected and
  * scaled through overflow-safe center and half-length formulas.
+ * The returned estimated_error is an absolute estimate, not a certified bound.
  */
-LMCAS_API Result<ApproxReal> adaptive_simpson_numeric(
+LMCAS_API Result<QuadratureEstimate> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
@@ -84,31 +90,13 @@ LMCAS_API Result<ApproxReal> adaptive_simpson_numeric(
     int max_depth = 50
 );
 
-LMCAS_API Result<ApproxReal> adaptive_simpson_numeric(
+LMCAS_API Result<QuadratureEstimate> adaptive_simpson_numeric(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::string& var,
     const std::shared_ptr<SymbolicExpr>& a,
     const std::shared_ptr<SymbolicExpr>& b,
     double tol = 1e-10,
     int max_depth = 50
-);
-
-/** @brief Default checked numerical integration using composite Simpson. */
-LMCAS_API Result<ApproxReal> numerical_integrate_numeric(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    ComputationContext& context,
-    int n = 100
-);
-
-LMCAS_API Result<ApproxReal> numerical_integrate_numeric(
-    const std::shared_ptr<SymbolicExpr>& f,
-    const std::string& var,
-    const std::shared_ptr<SymbolicExpr>& a,
-    const std::shared_ptr<SymbolicExpr>& b,
-    int n = 100
 );
 
 } // namespace LMCAS

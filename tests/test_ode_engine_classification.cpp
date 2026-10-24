@@ -1,3 +1,4 @@
+#include "expr.hpp"
 #include "test_common.hpp"
 #include "symbolic_ode_engine.hpp"
 #include "poly_utils.hpp"
@@ -122,7 +123,7 @@ TEST(OdeEngineClassification, EulerClassification) {
             SymbolicExpr::add(x, SymbolicExpr::number(-2))),
         SymbolicExpr::number(1));
     auto sampled_coefficient =
-        SymbolicExpr::multiply(x, ratio)->simplify();
+        LMCAS::simplify(SymbolicExpr::multiply(x, ratio)).value();
     std::vector<double> constants{42.0};
     EXPECT_FALSE((is_euler_equation(
         {sampled_coefficient, SymbolicExpr::number(1)},

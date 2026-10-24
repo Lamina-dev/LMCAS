@@ -2,6 +2,7 @@
 
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
+#include <map>
 
 namespace LMCAS::solver_detail {
 
@@ -13,6 +14,12 @@ inline lmmc_real_t finite_midpoint(lmmc_real_t lower, lmmc_real_t upper) {
 }
 
 std::shared_ptr<SymbolicExpr> to_ptr(const SymbolicExpr& expression);
+std::map<std::string, SymbolicExpr> solve_linear_system_impl(
+    const std::vector<SymbolicExpr>& equations,
+    const std::vector<std::string>& variables, ComputationContext& context);
+std::map<std::string, SymbolicExpr> project_unconditional_linear_system(
+    const std::vector<SymbolicExpr>& equations,
+    const std::vector<std::string>& variables, ComputationContext& context);
 std::shared_ptr<SymbolicExpr> multiply_no_expand(
     const std::shared_ptr<const SymbolicNode>& term,
     const std::vector<std::shared_ptr<const SymbolicNode>>& denominator_factors);

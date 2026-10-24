@@ -11,7 +11,7 @@ Result<void> prove_exact_spd(
     const std::shared_ptr<const MatrixNode>& matrix,
     ComputationContext& context,
     const std::string& operation) {
-    auto values = exact_rational_matrix(matrix);
+    auto values = exact_rational_matrix(matrix, context);
     if (!values) {
         return Result<void>::failure(
             CasErrc::Inconclusive,

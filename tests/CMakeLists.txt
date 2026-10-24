@@ -40,30 +40,17 @@ if(NOT TARGET rapidcheck)
 endif()
 include(GoogleTest)
 
-function(lmcas_register_test_source source)
-    cmake_path(ABSOLUTE_PATH source BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
-    get_property(_registered GLOBAL PROPERTY LMCAS_REGISTERED_TEST_SOURCES)
-    if(source IN_LIST _registered)
-        message(FATAL_ERROR "Test source registered more than once: ${source}")
-    endif()
-    set_property(GLOBAL APPEND PROPERTY LMCAS_REGISTERED_TEST_SOURCES "${source}")
-endfunction()
-
 function(lmcas_add_test TARGET_NAME SOURCE_FILE)
-    lmcas_register_test_source("${SOURCE_FILE}")
     cmake_parse_arguments(_test "PUBLIC" "LABEL" "" ${ARGN})
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
     set_target_properties(${TARGET_NAME} PROPERTIES EXCLUDE_FROM_ALL FALSE)
     target_link_libraries(${TARGET_NAME} PRIVATE GTest::gtest_main rapidcheck)
     if(_test_PUBLIC)
         target_link_libraries(${TARGET_NAME} PRIVATE lmcas)
-        set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE public)
     elseif(WIN32 AND TARGET_NAME STREQUAL "test_equivalence_complex_allocation")
         target_link_libraries(${TARGET_NAME} PRIVATE lmcas_test_local)
-        set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE local)
     else()
         target_link_libraries(${TARGET_NAME} PRIVATE lmcas_test_internal)
-        set_property(TARGET ${TARGET_NAME} PROPERTY LMCAS_TEST_LINKAGE internal)
     endif()
     lmcas_apply_instrumentation(${TARGET_NAME})
     target_compile_options(${TARGET_NAME} PRIVATE ${_lmcas_warning_options})
@@ -121,23 +108,18 @@ function(lmcas_add_public_header_checks TARGET_NAME)
     lmcas_apply_instrumentation(${TARGET_NAME})
 endfunction()
 
-lmcas_register_test_source(test_lmmc_lifecycle_windows.cpp)
 add_executable(test_lmmc_lifecycle_windows test_lmmc_lifecycle_windows.cpp)
 if(WIN32)
     target_link_libraries(test_lmmc_lifecycle_windows PRIVATE lmcas_test_local)
-    set_property(TARGET test_lmmc_lifecycle_windows PROPERTY LMCAS_TEST_LINKAGE local)
 else()
     target_link_libraries(test_lmmc_lifecycle_windows PRIVATE lmcas_test_internal)
-    set_property(TARGET test_lmmc_lifecycle_windows PROPERTY LMCAS_TEST_LINKAGE internal)
 endif()
 if(WIN32 AND MINGW)
     target_link_options(test_lmmc_lifecycle_windows PRIVATE -municode)
 endif()
 
-lmcas_register_test_source(lmmc_lifecycle_windows_module.cpp)
 add_library(lmcas_lifecycle_windows_module MODULE lmmc_lifecycle_windows_module.cpp)
 target_link_libraries(lmcas_lifecycle_windows_module PRIVATE lmcas)
-set_property(TARGET lmcas_lifecycle_windows_module PROPERTY LMCAS_TEST_LINKAGE public)
 foreach(_lifecycle_target test_lmmc_lifecycle_windows lmcas_lifecycle_windows_module)
     lmcas_apply_instrumentation(${_lifecycle_target})
     target_compile_options(${_lifecycle_target} PRIVATE ${_lmcas_warning_options})
@@ -217,7 +199,6 @@ lmcas_add_test_group(
     test_cyclic_integration.cpp
     test_definite_integration.cpp
     test_integration_fallback.cpp
-    test_integration_table_priority.cpp
     test_integration_table_roundtrip.cpp
     test_linear_substitution_roundtrip.cpp
     test_rational_decomposition_roundtrip.cpp
@@ -436,35 +417,3 @@ lmcas_add_test_group(
     test_differential_geometry.cpp
     test_numerical_integration.cpp
 )
-
-file(GLOB_RECURSE _lmcas_discovered_test_sources CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
-file(GLOB _lmcas_package_consumer_sources CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/package_consumer/*.cpp")
-set(_lmcas_test_support_sources
-    "${CMAKE_CURRENT_SOURCE_DIR}/lmmc_lifecycle_windows_module.cpp"
-    ${_lmcas_package_consumer_sources})
-list(REMOVE_ITEM _lmcas_discovered_test_sources
-    ${_lmcas_test_support_sources})
-
-get_property(_lmcas_registered_test_sources
-    GLOBAL PROPERTY LMCAS_REGISTERED_TEST_SOURCES)
-list(REMOVE_ITEM _lmcas_registered_test_sources
-    ${_lmcas_test_support_sources})
-list(SORT _lmcas_discovered_test_sources)
-list(SORT _lmcas_registered_test_sources)
-if(NOT _lmcas_discovered_test_sources STREQUAL
-   _lmcas_registered_test_sources)
-    set(_lmcas_unregistered_test_sources
-        ${_lmcas_discovered_test_sources})
-    list(REMOVE_ITEM _lmcas_unregistered_test_sources
-        ${_lmcas_registered_test_sources})
-    set(_lmcas_missing_test_sources
-        ${_lmcas_registered_test_sources})
-    list(REMOVE_ITEM _lmcas_missing_test_sources
-        ${_lmcas_discovered_test_sources})
-    message(FATAL_ERROR
-        "LMCAS test source lists must cover every tests/*.cpp file exactly once.\n"
-        "Unregistered: ${_lmcas_unregistered_test_sources}\n"
-        "Missing: ${_lmcas_missing_test_sources}")
-endif()

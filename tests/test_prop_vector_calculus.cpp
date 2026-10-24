@@ -1,4 +1,4 @@
-
+#include "expr.hpp"
 #include "test_common.hpp"
 #include <rapidcheck.h>
 #include "vector_calculus.hpp"
@@ -123,10 +123,10 @@ std::optional<double> eval_at_point(const std::shared_ptr<SymbolicExpr> &expr,
                                     double px, double py, double pz) {
     if (!expr)
         return std::nullopt;
-    auto e = expr->substitute("x", SE::number(px));
-    e = e->substitute("y", SE::number(py));
-    e = e->substitute("z", SE::number(pz));
-    e = e->simplify();
+    auto e = LMCAS::substitute(expr, "x", SE::number(px)).value();
+    e = LMCAS::substitute(e, "y", SE::number(py)).value();
+    e = LMCAS::substitute(e, "z", SE::number(pz)).value();
+    e = LMCAS::simplify(e).value();
     return test_numeric_eval(e);
 }
 
@@ -192,7 +192,7 @@ TEST(LmcasPropVectorCalculus, GradientComponents) {
         double pz = 1.0 + *rc::gen::inRange(0, (4) + 1);
 
         for (int i = 0; i < 3; ++i) {
-            auto partial = f->differentiate(vars[i]);
+            auto partial = LMCAS::differentiate(f, vars[i]).value();
             RC_ASSERT(partial != nullptr);
 
             auto grad_val = eval_at_point(grad_f[i], px, py, pz);
@@ -233,7 +233,7 @@ TEST(LmcasPropVectorCalculus, JacobianEntries) {
         for (int i = 0; i < m; ++i) {
             for (int j = 0; j < 3; ++j) {
                 auto entry = get_mat_entry(J, i, j);
-                auto expected = funcs[i]->differentiate(vars[j]);
+                auto expected = LMCAS::differentiate(funcs[i], vars[j]).value();
 
                 auto entry_val = eval_at_point(entry, px, py, pz);
                 auto expected_val = eval_at_point(expected, px, py, pz);
@@ -271,8 +271,8 @@ TEST(LmcasPropVectorCalculus, HessianSymmetry) {
                 auto hij_val = eval_at_point(hij, px, py, pz);
 
                 // Check correctness: H[i][j] == d2f/(dxi dxj)
-                auto df_dxi = f->differentiate(vars[i]);
-                auto d2f_dxidxj = df_dxi->differentiate(vars[j]);
+                auto df_dxi = LMCAS::differentiate(f, vars[i]).value();
+                auto d2f_dxidxj = LMCAS::differentiate(df_dxi, vars[j]).value();
                 auto expected_val = eval_at_point(d2f_dxidxj, px, py, pz);
 
                 if (hij_val && expected_val) {
@@ -398,7 +398,7 @@ TEST(LmcasPropVectorCalculus, ProjectionPerpendicular) {
 
         auto d = dot_product(diff, b);
         RC_ASSERT(d.has_value());
-        auto d_val = test_numeric_eval(d.value()->simplify());
+        auto d_val = test_numeric_eval(LMCAS::simplify(d.value()).value());
         if (d_val) {
             RC_ASSERT(std::abs(*d_val) < 1e-6);
         }
@@ -423,8 +423,8 @@ TEST(LmcasPropVectorCalculus, MixedProductDet) {
         auto mat = SE::matrix(mat_elems);
         auto d = LMCAS::matrix_determinant_checked(mat).value();
 
-        auto dp_val = test_numeric_eval(dp.value()->simplify());
-        auto d_val = test_numeric_eval(d->simplify());
+        auto dp_val = test_numeric_eval(LMCAS::simplify(dp.value()).value());
+        auto d_val = test_numeric_eval(LMCAS::simplify(d).value());
 
         if (dp_val && d_val) {
             RC_ASSERT(std::abs(*dp_val - *d_val) < 1e-6);

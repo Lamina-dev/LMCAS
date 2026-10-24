@@ -1,4 +1,3 @@
-
 #include "test_assumption_inference_mul_support.hpp"
 #include "assumption_context.hpp"
 #include "inference_engine.hpp"
@@ -410,7 +409,7 @@ static void expect_integral_exponent_projection(
             Tribool accepted = Tribool::True;
             for (const auto &condition : *domain.value()) {
                 const auto truth = assumptions.evaluate_condition(
-                    *condition->substitute("x", SymbolicExpr::number(value)));
+                    *LMCAS::substitute(condition, "x", SymbolicExpr::number(value)).value());
                 if (truth != Tribool::True) {
                     accepted = truth;
                     break;

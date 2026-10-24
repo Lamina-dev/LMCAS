@@ -25,15 +25,6 @@ std::size_t normalization_check_count(detail::RewriteBudget* budget,
     return rows * cols;
 }
 
-lmmc_real_t normalization_number_value(const NumberNode& node) {
-    if (const auto* real = std::get_if<lmmc_real_t>(&node.value())) {
-        return *real;
-    }
-    if (const auto* rational = std::get_if<Rational>(&node.value())) {
-        return rational->to_double();
-    }
-    return std::get<BigInt>(node.value()).to_double();
-}
 
 bool normalization_factor_less(const std::shared_ptr<const SymbolicNode>& left,
                                const std::shared_ptr<const SymbolicNode>& right) {
@@ -54,18 +45,11 @@ bool try_get_integer_value(
         value = *integer;
         return true;
     }
-    if (const auto* rational = std::get_if<Rational>(&node->value())) {
-        if (rational->get_denominator() != BigInt(1)) {
-            return false;
-        }
-        value = rational->get_numerator();
-        return true;
-    }
-    const auto real = std::get<lmmc_real_t>(node->value());
-    if (!std::isfinite(real) || std::trunc(real) != real) {
+    const auto& rational = std::get<Rational>(node->value());
+    if (rational.get_denominator() != BigInt(1)) {
         return false;
     }
-    value = Rational::from_double(real).get_numerator();
+    value = rational.get_numerator();
     return true;
 }
 
@@ -150,39 +134,11 @@ bool NodeCompare::operator()(const std::shared_ptr<const SymbolicNode>& lhs, con
 
         return lhs->compare(*rhs) < 0;
     }
-bool is_approximate_number(const NumberNode& node) {
-    const auto* real = std::get_if<lmmc_real_t>(&node.value());
-    return real && (!std::isfinite(*real) || std::trunc(*real) != *real);
-}
-
-namespace {
-class InexactNumberDetector final : public detail::RecursiveSymbolicVisitor {
-public:
-    bool found = false;
-
-    void visit(const NumberNode& number) override {
-        found = found ||
-            std::holds_alternative<lmmc_real_t>(number.value());
-    }
-};
-}
-
-bool contains_inexact_number(
-    const std::shared_ptr<const SymbolicNode>& node) {
-    if (!node) return false;
-    InexactNumberDetector detector;
-    node->accept(detector);
-    return detector.found;
-}
-
 Rational exact_number_as_rational(const NumberNode& node) {
     if (const auto* rational = std::get_if<Rational>(&node.value())) {
         return *rational;
     }
-    if (const auto* integer = std::get_if<BigInt>(&node.value())) {
-        return Rational(*integer);
-    }
-    return Rational::from_double(std::get<lmmc_real_t>(node.value()));
+    return Rational(std::get<BigInt>(node.value()));
 }
 
 /**
@@ -192,24 +148,14 @@ Rational exact_number_as_rational(const NumberNode& node) {
  * @return 和的数值节点
  */
 std::shared_ptr<const NumberNode> add_numbers(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
-     if (is_approximate_number(*a) || is_approximate_number(*b)) {
-         lmmc_real_t v1 = normalization_number_value(*a);
-         lmmc_real_t v2 = normalization_number_value(*b);
-         lmmc_real_t sum = v1 + v2;
-         return LMCAS::detail::make_node<NumberNode>(sum);
-     }
-
      if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
          const Rational r1 = exact_number_as_rational(*a);
          const Rational r2 = exact_number_as_rational(*b);
          return LMCAS::detail::make_node<NumberNode>(r1 + r2);
      }
 
-     BigInt i1;
-     BigInt i2;
-     try_get_integer_value(a, i1);
-     try_get_integer_value(b, i2);
-     return LMCAS::detail::make_node<NumberNode>(i1 + i2);
+     return LMCAS::detail::make_node<NumberNode>(
+         std::get<BigInt>(a->value()) + std::get<BigInt>(b->value()));
 }
 
 /**
@@ -219,24 +165,14 @@ std::shared_ptr<const NumberNode> add_numbers(const std::shared_ptr<const Number
  * @return 积的数值节点
  */
 std::shared_ptr<const NumberNode> multiply_numbers(const std::shared_ptr<const NumberNode>& a, const std::shared_ptr<const NumberNode>& b) {
-     if (is_approximate_number(*a) || is_approximate_number(*b)) {
-         lmmc_real_t v1 = normalization_number_value(*a);
-         lmmc_real_t v2 = normalization_number_value(*b);
-         lmmc_real_t prod = v1 * v2;
-         return LMCAS::detail::make_node<NumberNode>(prod);
-     }
-
      if (std::holds_alternative<Rational>(a->value()) || std::holds_alternative<Rational>(b->value())) {
          const Rational r1 = exact_number_as_rational(*a);
          const Rational r2 = exact_number_as_rational(*b);
          return LMCAS::detail::make_node<NumberNode>(r1 * r2);
      }
 
-     BigInt i1;
-     BigInt i2;
-     try_get_integer_value(a, i1);
-     try_get_integer_value(b, i2);
-     return LMCAS::detail::make_node<NumberNode>(i1 * i2);
+     return LMCAS::detail::make_node<NumberNode>(
+         std::get<BigInt>(a->value()) * std::get<BigInt>(b->value()));
 }
 static bool is_pi_variable(const VariableNode& variable) {
     return variable.is_constant() &&

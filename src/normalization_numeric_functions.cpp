@@ -1,5 +1,4 @@
 #include "internal/normalization_utils.hpp"
-#include <cmath>
 
 namespace LMCAS {
 namespace {
@@ -26,24 +25,16 @@ std::shared_ptr<const SymbolicNode> numeric_absolute(const NumberNode& number) {
     if (const auto* integer = std::get_if<BigInt>(&number.value())) {
         return detail::make_node<NumberNode>(integer->abs());
     }
-    if (const auto* rational = std::get_if<Rational>(&number.value())) {
-        if (rational->get_numerator().is_negative()) {
-            return detail::make_node<NumberNode>(Rational(
-                rational->get_numerator().abs(), rational->get_denominator()));
-        }
-        return detail::make_node<NumberNode>(*rational);
+    const auto& rational = std::get<Rational>(number.value());
+    if (rational.get_numerator().is_negative()) {
+        return detail::make_node<NumberNode>(Rational(
+            rational.get_numerator().abs(), rational.get_denominator()));
     }
-    return detail::make_node<NumberNode>(std::abs(std::get<lmmc_real_t>(number.value())));
+    return detail::make_node<NumberNode>(rational);
 }
 
 std::shared_ptr<const SymbolicNode> numeric_square_root(
     const std::shared_ptr<const NumberNode>& number, detail::RewriteBudget* budget) {
-    if (const auto* real = std::get_if<lmmc_real_t>(&number->value())) {
-        if (*real >= 0) {
-            return detail::make_node<NumberNode>(std::sqrt(*real));
-        }
-        return nullptr;
-    }
     if (auto root = normalization_exact_square_root(*number)) {
         return root;
     }
@@ -54,13 +45,6 @@ std::shared_ptr<const SymbolicNode> numeric_square_root(
 
 std::shared_ptr<const SymbolicNode> numeric_lambert_w(
     const std::shared_ptr<const NumberNode>& number) {
-    if (const auto* real = std::get_if<lmmc_real_t>(&number->value())) {
-        lmmc_real_t value;
-        if (lmmc_lambertw(*real, &value) == LMMC_STATUS_OK && std::isfinite(value)) {
-            return detail::make_node<NumberNode>(value);
-        }
-        return nullptr;
-    }
     if (number_equals_integer(number, BigInt(0))) {
         return detail::make_node<NumberNode>(BigInt(0));
     }

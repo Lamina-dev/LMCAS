@@ -4,6 +4,8 @@
 #include "solve_transcendental.hpp"
 #include "newton_raphson.hpp"
 #include "root_of_utils.hpp"
+#include "residual_verification.hpp"
+#include "expr.hpp"
 #include <cmath>
 #include <random>
 #include <sstream>
@@ -153,6 +155,30 @@ TEST(DispatcherRouting, QuarticIrreducibleReturnsExactly4Roots) {
     for (const auto &root : results) {
         EXPECT_NE(root->to_string().find("rootof"), std::string::npos);
     }
+    for (const auto& root : results) {
+        auto residual = substitute(expr, "x", root);
+        ASSERT_TRUE(residual) << residual.error().message;
+        ComputationContext context;
+        auto proof = check_zero_residual(residual.value(), context);
+        ASSERT_TRUE(proof) << proof.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+    }
+}
+
+TEST(DispatcherRouting, QuarticBiquadraticDoesNotRequireRootof) {
+    auto expr = build_poly_expr({6, 0, -5, 0, 1}, "x");
+    SolveOptions opts;
+    opts.return_rootof = false;
+    auto roots = solve_vector_for_test(expr, "x", opts);
+    ASSERT_EQ(roots.size(), 4u);
+    for (const auto& root : roots) {
+        auto residual = substitute(expr, "x", root);
+        ASSERT_TRUE(residual) << residual.error().message;
+        ComputationContext context;
+        auto proof = check_zero_residual(residual.value(), context);
+        ASSERT_TRUE(proof) << proof.error().message;
+        EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
+    }
 }
 
 TEST(DispatcherRouting, Degree5PreprocessingRootof) {
@@ -174,21 +200,16 @@ TEST(DispatcherRouting, Degree5PreprocessingRootof) {
 
         int degree = (int)test_polys[trial].size() - 1;
 
-        bool correct_count = ((int)results.size() == degree);
-
-        bool has_rootof = false;
-        for (const auto &r : results) {
-            std::string s = r->to_string();
-            if (s.find("rootof") != std::string::npos) {
-                has_rootof = true;
-                break;
-            }
+        ASSERT_EQ(results.size(), static_cast<std::size_t>(degree))
+            << "Trial " << trial << ": exact roots preserve total multiplicity";
+        for (const auto& root : results) {
+            auto residual = substitute(expr, "x", root);
+            ASSERT_TRUE(residual) << residual.error().message;
+            ComputationContext context;
+            auto proof = check_zero_residual(residual.value(), context);
+            ASSERT_TRUE(proof) << proof.error().message;
+            EXPECT_TRUE(std::holds_alternative<ProvedZeroResidual>(proof.value()));
         }
-
-        EXPECT_TRUE(correct_count || has_rootof)
-            << "Trial " << trial << " (deg=" << degree
-            << "): expected " << degree << " roots, got " << results.size()
-            << ", has_rootof=" << has_rootof;
     }
 }
 

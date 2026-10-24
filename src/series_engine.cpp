@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include "internal/expression_transform.hpp"
 /**
  * @file series_engine.cpp
  */
@@ -162,12 +164,15 @@ using detail::series_support::validate_power_series_coefficients;
 std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     size_t len = std::max(a.size(), b.size());
     std::vector<std::shared_ptr<SymbolicExpr>> result(len);
     for (size_t i = 0; i < len; ++i) {
         auto ai = (i < a.size() && a[i]) ? a[i] : SymbolicExpr::number(0);
         auto bi = (i < b.size() && b[i]) ? b[i] : SymbolicExpr::number(0);
-        result[i] = SymbolicExpr::add(ai, bi)->simplify();
+        result[i] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(ai, bi)), transform_budget));
     }
     return result;
 }
@@ -175,7 +180,9 @@ std::vector<std::shared_ptr<SymbolicExpr>> power_series_add(
 PowerSeriesResult power_series_multiply_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& a,
     const std::vector<std::shared_ptr<SymbolicExpr>>& b, int order,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "power_series_multiply";
     auto order_check = validate_power_series_order(order, context, operation);
     if (!order_check) {
@@ -209,13 +216,20 @@ PowerSeriesResult power_series_multiply_checked(
         if (terms.empty()) {
             result[k] = SymbolicExpr::number(0);
         } else if (terms.size() == 1) {
-            result[k] = LMCAS::detail::make_expression_ptr(terms[0])->simplify();
+            result[k] = detail::make_expression_ptr(detail::normalize_node(terms[0], transform_budget));
         } else {
-            result[k] = LMCAS::detail::make_expression_ptr(
-                LMCAS::detail::make_node<AddNode>(terms))->simplify();
+            result[k] = detail::make_expression_ptr(detail::normalize_node(LMCAS::detail::make_node<AddNode>(terms), transform_budget));
         }
     }
     return PowerSeriesResult::success(std::move(result));
+} catch (const CasError& error) {
+    return PowerSeriesResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return PowerSeriesResult::failure(CasErrc::ResourceLimit, "allocation failed", "power_series_multiply");
+} catch (const std::length_error& error) {
+    return PowerSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "power_series_multiply");
+} catch (const std::exception& error) {
+    return PowerSeriesResult::failure(CasErrc::InternalInvariant, error.what(), "power_series_multiply");
 }
 
 PowerSeriesResult power_series_multiply_checked(
@@ -256,7 +270,9 @@ static Result<void> composition_inner_powers(
 PowerSeriesResult power_series_compose_checked(
     const std::vector<std::shared_ptr<SymbolicExpr>>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& g, int order,
-    ComputationContext& context) {
+    ComputationContext& context) try {
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     const std::string operation = "power_series_compose";
     auto order_check = validate_power_series_order(order, context, operation);
     if (!order_check) {
@@ -294,9 +310,17 @@ PowerSeriesResult power_series_compose_checked(
             continue;
         }
         for (size_t i = 0; i < n && i < gp[k].size(); ++i)
-            result[i] = SymbolicExpr::add(result[i], SymbolicExpr::multiply(fk, gp[k][i]))->simplify();
+            result[i] = detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(result[i], SymbolicExpr::multiply(fk, gp[k][i]))), transform_budget));
     }
     return PowerSeriesResult::success(std::move(result));
+} catch (const CasError& error) {
+    return PowerSeriesResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return PowerSeriesResult::failure(CasErrc::ResourceLimit, "allocation failed", "power_series_compose");
+} catch (const std::length_error& error) {
+    return PowerSeriesResult::failure(CasErrc::ResourceLimit, error.what(), "power_series_compose");
+} catch (const std::exception& error) {
+    return PowerSeriesResult::failure(CasErrc::InternalInvariant, error.what(), "power_series_compose");
 }
 
 PowerSeriesResult power_series_compose_checked(
@@ -311,6 +335,9 @@ PowerSeriesResult power_series_compose_checked(
 std::shared_ptr<SymbolicExpr> symbolic_sum(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!body || !lower || !upper) {
         return nullptr;
     }
@@ -330,16 +357,16 @@ std::shared_ptr<SymbolicExpr> symbolic_sum(
             const BigInt increment(1);
             for (std::uint64_t iteration = 0; iteration < iterations; ++iteration, k += increment) {
                 auto val = SymbolicExpr::number(k);
-                auto term = body->substitute(index, val);
-                if (term) { term = term->simplify(); terms.push_back(LMCAS::detail::node(term)); }
+                auto term = detail::make_expression_ptr(detail::substitute_node(detail::node(body), index, detail::node(val), transform_budget));
+                if (term) { term = detail::make_expression_ptr(detail::normalize_node(detail::node(term), transform_budget)); terms.push_back(LMCAS::detail::node(term)); }
             }
             if (terms.empty()) {
                 return SymbolicExpr::number(0);
             }
             if (terms.size() == 1) {
-                return LMCAS::detail::make_expression_ptr(terms[0])->simplify();
+                return detail::make_expression_ptr(detail::normalize_node(terms[0], transform_budget));
             }
-            return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<AddNode>(terms))->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(LMCAS::detail::make_node<AddNode>(terms), transform_budget));
         }
     }
     auto k_var = SymbolicExpr::variable(index);
@@ -349,7 +376,7 @@ std::shared_ptr<SymbolicExpr> symbolic_sum(
         auto su = SymbolicExpr::divide(SymbolicExpr::multiply(u, u1), SymbolicExpr::number(2));
         auto lm1 = SymbolicExpr::add(l, SymbolicExpr::number(-1));
         auto sl = SymbolicExpr::divide(SymbolicExpr::multiply(lm1, l), SymbolicExpr::number(2));
-        return SymbolicExpr::add(su, SymbolicExpr::multiply(SymbolicExpr::number(-1), sl))->simplify();
+        return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::add(su, SymbolicExpr::multiply(SymbolicExpr::number(-1), sl))), transform_budget));
     }
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<SummationNode>(LMCAS::detail::node(body), index, LMCAS::detail::node(lower), LMCAS::detail::node(upper)));
 }
@@ -357,6 +384,9 @@ std::shared_ptr<SymbolicExpr> symbolic_sum(
 std::shared_ptr<SymbolicExpr> symbolic_product(
     const std::shared_ptr<SymbolicExpr>& body, const std::string& index,
     const std::shared_ptr<SymbolicExpr>& lower, const std::shared_ptr<SymbolicExpr>& upper) {
+    ComputationContext context;
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!body || !lower || !upper) {
         return nullptr;
     }
@@ -376,10 +406,10 @@ std::shared_ptr<SymbolicExpr> symbolic_product(
             const BigInt increment(1);
             for (std::uint64_t iteration = 0; iteration < iterations; ++iteration, k += increment) {
                 auto val = SymbolicExpr::number(k);
-                auto term = body->substitute(index, val);
-                if (term) { term = term->simplify(); result = SymbolicExpr::multiply(result, term); }
+                auto term = detail::make_expression_ptr(detail::substitute_node(detail::node(body), index, detail::node(val), transform_budget));
+                if (term) { term = detail::make_expression_ptr(detail::normalize_node(detail::node(term), transform_budget)); result = SymbolicExpr::multiply(result, term); }
             }
-            return result->simplify();
+            return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
         }
     }
     return LMCAS::detail::make_expression_ptr(LMCAS::detail::make_node<ProductNode>(LMCAS::detail::node(body), index, LMCAS::detail::node(lower), LMCAS::detail::node(upper)));

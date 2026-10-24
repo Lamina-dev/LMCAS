@@ -1,3 +1,4 @@
+#include <stdexcept>
 /**
  * @file differential_geometry.cpp
  * @brief 微分几何实现。
@@ -6,6 +7,8 @@
 #include "symbolic_matrix.hpp"
 #include "symbolic.hpp"
 #include "internal/symbolic_ast.hpp"
+#include "internal/expression_transform.hpp"
+#include "internal/rewrite_budget.hpp"
 
 #include <algorithm>
 #include <map>
@@ -254,13 +257,11 @@ DifferentialGeometryExprResult exterior_derivative_term(
     const std::map<std::vector<std::size_t>, std::size_t>& coefficient_index,
     const std::vector<std::size_t>& output_index,
     std::size_t removed,
-    ComputationContext& context,
+    detail::RewriteBudget& budget,
     const std::string& operation)
-{
-    auto term_budget = context.consume_steps(4, operation);
+try {
+    auto term_budget = budget.context().consume_steps(4, operation);
     if (!term_budget) return DifferentialGeometryExprResult::failure(term_budget.error());
-    auto node_budget = context.reserve_nodes(4, operation);
-    if (!node_budget) return DifferentialGeometryExprResult::failure(node_budget.error());
 
     auto source_index = output_index;
     const std::size_t derivative_variable = source_index[removed];
@@ -271,16 +272,21 @@ DifferentialGeometryExprResult exterior_derivative_term(
             CasErrc::InternalInvariant,
             "exterior derivative could not locate an input coefficient", operation);
     }
-    auto partial = form_coeffs[source->second]->differentiate(vars[derivative_variable]);
-    if (!partial || !LMCAS::detail::node(partial)) {
-        return DifferentialGeometryExprResult::failure(
-            CasErrc::InternalInvariant,
-            "exterior derivative produced a null partial derivative", operation);
-    }
+    auto partial = detail::make_expression_ptr(detail::differentiate_node(
+        detail::node(form_coeffs[source->second]), vars[derivative_variable], budget));
     if (removed % 2 != 0) {
         partial = SymbolicExpr::multiply(SymbolicExpr::number(-1), partial);
     }
+    budget.measure(detail::node(partial));
     return DifferentialGeometryExprResult::success(std::move(partial));
+} catch (const CasError& error) {
+    return DifferentialGeometryExprResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return DifferentialGeometryExprResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 DifferentialGeometryExprResult exterior_derivative_component(
@@ -288,35 +294,44 @@ DifferentialGeometryExprResult exterior_derivative_component(
     const std::vector<std::string>& vars,
     const std::map<std::vector<std::size_t>, std::size_t>& coefficient_index,
     const std::vector<std::size_t>& output_index,
-    ComputationContext& context,
+    detail::RewriteBudget& budget,
     const std::string& operation)
-{
+try {
     auto component = SymbolicExpr::number(0);
     for (std::size_t removed = 0; removed < output_index.size(); ++removed) {
         auto partial = exterior_derivative_term(
-            form_coeffs, vars, coefficient_index, output_index, removed, context, operation);
+            form_coeffs, vars, coefficient_index, output_index, removed, budget, operation);
         if (!partial) return partial;
         component = SymbolicExpr::add(component, partial.value());
     }
-    component = component->simplify();
+    component = detail::make_expression_ptr(
+        detail::normalize_node(detail::node(component), budget));
     return checked_geometry_expression(std::move(component), CasErrc::InternalInvariant,
                                        "exterior derivative produced a null component",
                                        operation);
+} catch (const CasError& error) {
+    return DifferentialGeometryExprResult::failure(error);
+} catch (const std::bad_alloc&) {
+    return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit, "allocation failed", operation);
+} catch (const std::length_error& error) {
+    return DifferentialGeometryExprResult::failure(CasErrc::ResourceLimit, error.what(), operation);
+} catch (const std::exception& error) {
+    return DifferentialGeometryExprResult::failure(CasErrc::InternalInvariant, error.what(), operation);
 }
 
 } // namespace
 
 static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
     const std::shared_ptr<SymbolicExpr>&,
-    const std::vector<std::string>&, int, int, int);
+    const std::vector<std::string>&, int, int, int, ComputationContext& context);
 static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::shared_ptr<SymbolicExpr>&,
-    const std::vector<std::string>&, int, int, int);
+    const std::vector<std::string>&, int, int, int, ComputationContext& context);
 static std::shared_ptr<SymbolicExpr> lie_derivative_impl(
     const std::shared_ptr<SymbolicExpr>&,
     const std::vector<std::shared_ptr<SymbolicExpr>>&,
-    const std::vector<std::string>&, int);
+    const std::vector<std::string>&, int, ComputationContext& context);
 
 DifferentialGeometryExprResult metric_inverse_checked(
     const std::shared_ptr<SymbolicExpr>& g_ij,
@@ -381,7 +396,7 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
         return DifferentialGeometryExprResult::failure(budget.error());
     }
     try {
-        auto result = christoffel_first_kind_impl(g_ij, coords, k, i, j);
+        auto result = christoffel_first_kind_impl(g_ij, coords, k, i, j, context);
         return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
                                            "Christoffel symbol could not be constructed",
                                            operation);
@@ -408,7 +423,10 @@ DifferentialGeometryExprResult christoffel_first_kind_checked(
 static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::vector<std::string>& coords,
-    int k, int i, int j) {
+    int k, int i, int j, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     
     auto mat = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(g_ij));
     if (!mat) return SymbolicExpr::number(0);
@@ -417,16 +435,16 @@ static std::shared_ptr<SymbolicExpr> christoffel_first_kind_impl(
     auto g_ik = LMCAS::detail::make_expression_ptr(mat->get(i, k));
     auto g_ij_comp = LMCAS::detail::make_expression_ptr(mat->get(i, j));
     
-    auto term1 = g_jk->differentiate(coords[i]);
-    auto term2 = g_ik->differentiate(coords[j]);
-    auto term3 = g_ij_comp->differentiate(coords[k]);
+    auto term1 = detail::make_expression_ptr(detail::differentiate_node(detail::node(g_jk), coords[i], transform_budget));
+    auto term2 = detail::make_expression_ptr(detail::differentiate_node(detail::node(g_ik), coords[j], transform_budget));
+    auto term3 = detail::make_expression_ptr(detail::differentiate_node(detail::node(g_ij_comp), coords[k], transform_budget));
     
     auto sum12 = SymbolicExpr::add(term1, term2);
     auto diff = SymbolicExpr::add(sum12, SymbolicExpr::multiply(term3, SymbolicExpr::number(-1)));
     
-    return SymbolicExpr::multiply(
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(SymbolicExpr::multiply(
         SymbolicExpr::number(Rational(BigInt(1), BigInt(2))),
-        diff)->simplify();
+        diff)), transform_budget));
 }
 
 DifferentialGeometryExprResult christoffel_second_kind_checked(
@@ -463,7 +481,7 @@ DifferentialGeometryExprResult christoffel_second_kind_checked(
         return DifferentialGeometryExprResult::failure(budget.error());
     }
     try {
-        auto result = christoffel_second_kind_impl(g_ij, g_up_ij, coords, k, i, j);
+        auto result = christoffel_second_kind_impl(g_ij, g_up_ij, coords, k, i, j, context);
         return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
                                            "Christoffel symbol could not be constructed",
                                            operation);
@@ -492,7 +510,10 @@ static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::shared_ptr<SymbolicExpr>& g_up_ij,
     const std::vector<std::string>& coords,
-    int k, int i, int j) {
+    int k, int i, int j, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     
     auto mat_up = std::dynamic_pointer_cast<const MatrixNode>(LMCAS::detail::node(g_up_ij));
     if (!mat_up) return SymbolicExpr::number(0);
@@ -502,39 +523,42 @@ static std::shared_ptr<SymbolicExpr> christoffel_second_kind_impl(
     
     for (size_t m = 0; m < dim; m++) {
         auto g_up_km = LMCAS::detail::make_expression_ptr(mat_up->get(k, m));
-        auto gamma_first = christoffel_first_kind_impl(g_ij, coords, m, i, j);
+        auto gamma_first = christoffel_first_kind_impl(g_ij, coords, m, i, j, context);
         auto term = SymbolicExpr::multiply(g_up_km, gamma_first);
         result = SymbolicExpr::add(result, term);
     }
     
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 static std::shared_ptr<SymbolicExpr> riemann_curvature_tensor_with_inverse(
     const std::shared_ptr<SymbolicExpr>& g_ij,
     const std::shared_ptr<SymbolicExpr>& g_up_ij,
     const std::vector<std::string>& coords,
-    int rho, int sigma, int mu, int nu) {
-    auto gamma_rho_nu_sigma =
-        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, sigma);
-    auto gamma_rho_mu_sigma =
-        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, sigma);
+    int rho, int sigma, int mu, int nu, ComputationContext& context) {
 
-    auto term1 = gamma_rho_nu_sigma->differentiate(coords[mu]);
-    auto term2 = gamma_rho_mu_sigma->differentiate(coords[nu]);
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
+    auto gamma_rho_nu_sigma =
+        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, sigma, context);
+    auto gamma_rho_mu_sigma =
+        christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, sigma, context);
+
+    auto term1 = detail::make_expression_ptr(detail::differentiate_node(detail::node(gamma_rho_nu_sigma), coords[mu], transform_budget));
+    auto term2 = detail::make_expression_ptr(detail::differentiate_node(detail::node(gamma_rho_mu_sigma), coords[nu], transform_budget));
     auto result = SymbolicExpr::add(
         term1,
         SymbolicExpr::multiply(term2, SymbolicExpr::number(-1)));
 
     for (std::size_t lambda = 0; lambda < coords.size(); ++lambda) {
         auto gamma_rho_mu_lambda =
-            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, lambda);
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, mu, lambda, context);
         auto gamma_lambda_nu_sigma =
-            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, nu, sigma);
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, nu, sigma, context);
         auto gamma_rho_nu_lambda =
-            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, lambda);
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, rho, nu, lambda, context);
         auto gamma_lambda_mu_sigma =
-            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, mu, sigma);
+            christoffel_second_kind_impl(g_ij, g_up_ij, coords, lambda, mu, sigma, context);
         auto product_difference = SymbolicExpr::add(
             SymbolicExpr::multiply(
                 gamma_rho_mu_lambda, gamma_lambda_nu_sigma),
@@ -544,7 +568,7 @@ static std::shared_ptr<SymbolicExpr> riemann_curvature_tensor_with_inverse(
                 SymbolicExpr::number(-1)));
         result = SymbolicExpr::add(result, product_difference);
     }
-    return result->simplify();
+    return detail::make_expression_ptr(detail::normalize_node(detail::node(result), transform_budget));
 }
 
 DifferentialGeometryExprResult riemann_curvature_tensor_checked(
@@ -585,7 +609,7 @@ DifferentialGeometryExprResult riemann_curvature_tensor_checked(
             return DifferentialGeometryExprResult::failure(inverse_metric.error());
         }
         auto result = riemann_curvature_tensor_with_inverse(
-            g_ij, inverse_metric.value(), coords, rho, sigma, mu, nu);
+            g_ij, inverse_metric.value(), coords, rho, sigma, mu, nu, context);
         return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
                                            "Riemann curvature component could not be constructed",
                                            operation);
@@ -636,7 +660,7 @@ DifferentialGeometryExprResult lie_derivative_checked(
                                         operation);
     if (!budget) return DifferentialGeometryExprResult::failure(budget.error());
     try {
-        auto result = lie_derivative_impl(f, X, vars, order);
+        auto result = lie_derivative_impl(f, X, vars, order, context);
         return checked_geometry_expression(std::move(result), CasErrc::Inconclusive,
                                            "Lie derivative could not be constructed",
                                            operation);
@@ -665,16 +689,19 @@ static std::shared_ptr<SymbolicExpr> lie_derivative_impl(
     const std::shared_ptr<SymbolicExpr>& f,
     const std::vector<std::shared_ptr<SymbolicExpr>>& X,
     const std::vector<std::string>& vars,
-    int order) {
+    int order, ComputationContext& context) {
+
+    detail::RewriteBudget transform_budget(context, (context).limits().max_recursion_depth,
+                                            (context).limits().max_ast_nodes, "transform");
     if (!f || X.size() != vars.size()) return SymbolicExpr::number(0);
     auto result = f;
     for (int it = 0; it < order; ++it) {
         auto acc = SymbolicExpr::number(0);
         for (size_t i = 0; i < vars.size(); ++i) {
-            auto partial = result->differentiate(vars[i]);
+            auto partial = detail::make_expression_ptr(detail::differentiate_node(detail::node(result), vars[i], transform_budget));
             acc = SymbolicExpr::add(acc, SymbolicExpr::multiply(X[i], partial));
         }
-        result = acc->simplify();
+        result = detail::make_expression_ptr(detail::normalize_node(detail::node(acc), transform_budget));
     }
     return result;
 }
@@ -697,6 +724,13 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
                                                operation);
     if (!output_count) return DifferentialGeometryVectorResult::failure(output_count.error());
     try {
+        detail::RewriteBudget budget(context, context.limits().max_recursion_depth,
+                                     context.limits().max_ast_nodes, operation.c_str());
+        std::size_t input_nodes = 0;
+        for (const auto& coefficient : form_coeffs) {
+            input_nodes = budget.append_size(
+                input_nodes, budget.measure(detail::node(coefficient)));
+        }
         const auto input_indices = index_combinations(vars.size(),
                                                       static_cast<std::size_t>(degree),
                                                       input_count.value());
@@ -710,13 +744,18 @@ DifferentialGeometryVectorResult exterior_derivative_checked(
 
         std::vector<std::shared_ptr<SymbolicExpr>> result;
         result.reserve(output_count.value());
+        std::size_t output_nodes = 0;
         for (const auto& output_index : output_indices) {
             auto component = exterior_derivative_component(
-                form_coeffs, vars, coefficient_index, output_index, context, operation);
+                form_coeffs, vars, coefficient_index, output_index, budget, operation);
             if (!component) return DifferentialGeometryVectorResult::failure(component.error());
+            output_nodes = budget.append_size(
+                output_nodes, budget.measure(detail::node(component.value())));
             result.push_back(std::move(component.value()));
         }
         return DifferentialGeometryVectorResult::success(std::move(result));
+    } catch (const CasError& error) {
+        return DifferentialGeometryVectorResult::failure(error);
     } catch (const std::bad_alloc&) {
         return DifferentialGeometryVectorResult::failure(CasErrc::ResourceLimit,
                                                          "allocation failed while calculating exterior derivative",
